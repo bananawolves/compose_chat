@@ -44,6 +44,7 @@ import kotlin.math.log10
 import android.media.MediaRecorder
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.tooling.preview.Preview
 import com.example.emotionlink.ViewModel.ChatScreen
 import com.example.emotionlink.ViewModel.HomeViewModel
 import com.example.emotionlink.ViewModel.OverlayViewModel
@@ -55,16 +56,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-//            val navController = rememberNavController()
-//            NavHost(navController = navController, startDestination = "home") {
-//                composable("home") { HomeScreen(navController) }
-//                composable("overlay") { OverlayScreen(navController) }
-//            }
+            val navController = rememberNavController()
+            NavHost(navController = navController, startDestination = "home") {
+                composable("home") { HomeScreen(navController) }
+                composable("overlay") { OverlayScreen(navController) }
+            }
             ChatScreen()
         }
     }
 }
-
 @Composable
 fun HomeScreen(
     navController: NavHostController,
@@ -95,6 +95,7 @@ fun HomeScreen(
         }
     }
 }
+
 
 
 

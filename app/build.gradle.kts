@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.emotionlink"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
@@ -40,10 +40,12 @@ android {
 }
 
 dependencies {
+    implementation("org.java-websocket:Java-WebSocket:1.5.3")
     implementation("androidx.compose.material:material-icons-extended:1.5.4")
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.jakewharton.timber:timber:5.0.1")
+    implementation("androidx.appcompat:appcompat:1.6.1")
     //implementation("com.android.application:com.android.application.gradle.plugin:8.9.0-alpha01")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -56,6 +58,7 @@ dependencies {
     implementation(libs.androidx.navigation.runtime.ktx)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.firebase.database.ktx)
+    implementation(libs.androidx.appcompat)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

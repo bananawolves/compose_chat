@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/voiceContainer"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <Button
+        android:id="@+id/recordButton"
+        android:layout_width="200dp"
+        android:layout_height="80dp"
+        android:text="按住说话"
+        android:background="#FF6200EE"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp" />
+
+    <!-- 显示录音转换的文字 -->
+    <TextView
+        android:id="@+id/recognizedText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="8dp"
+        android:text="语音转文字显示区"
+        android:textSize="16sp"
+        android:textColor="#000000"
+        android:layout_marginTop="16dp" />
+
+</LinearLayout>
+
+
