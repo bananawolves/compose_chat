@@ -22,7 +22,7 @@ public class WebSocketUploader extends WebSocketClient {
 
     @Override
     public void onOpen(ServerHandshake handshakedata) {
-        System.out.println("WebSocket opened");
+        System.out.println("Audio WebSocket opened");
     }
 
     public void sendInit() {
@@ -45,20 +45,11 @@ public class WebSocketUploader extends WebSocketClient {
         try {
             byte[] chunk = new byte[length];
             System.arraycopy(audio, 0, chunk, 0, length);
-            JSONObject audioObj = new JSONObject();
-            audioObj.put("rec_status", 1);
-            audioObj.put("audio_stream", Base64.getEncoder().encodeToString(chunk));
-            send(audioObj.toString());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void sendEnd() {
-        try {
-            JSONObject end = new JSONObject();
-            end.put("rec_status", 2);
-            send(end.toString());
+//            JSONObject audioObj = new JSONObject();
+//            audioObj.put("rec_status", 1);
+//            audioObj.put("audio_stream", Base64.getEncoder().encodeToString(chunk));
+//            send(audioObj.toString());
+            send(chunk);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -67,6 +58,7 @@ public class WebSocketUploader extends WebSocketClient {
     @Override
     public void onMessage(String text) {
         try {
+            System.out.println("Audio进入回调"+text);//{"code":10000,"message":"Success","res_status":0,"sid":"c27a74f3-de39-430e-8ed9-7356232d15a7"}
             JSONObject json = new JSONObject(text);
             if ("audio".equals(json.optString("type"))) {
                 String audioUrl = json.optString("audio_url");
@@ -78,14 +70,23 @@ public class WebSocketUploader extends WebSocketClient {
             e.printStackTrace();
         }
     }
+    public void sendEnd() {
+        try {
+            JSONObject end = new JSONObject();
+            end.put("rec_status", 2);
+            send(end.toString());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     @Override
     public void onError(Exception ex) {
-        System.err.println("WebSocket error: " + ex.getMessage());
+        System.err.println("Audio WebSocket error: " + ex.getMessage());
     }
 
     @Override
     public void onClose(int code, String reason, boolean remote) {
-        System.out.println("WebSocket closed: " + reason);
+        System.out.println("Audio WebSocket closed: " + reason);
     }
 }

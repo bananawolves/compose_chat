@@ -3,6 +3,7 @@ package com.example.emotionlink.AudioDemo;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.media.AudioFormat;
+import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
@@ -37,6 +38,7 @@ public class AudioActivity extends AppCompatActivity implements AudioUrlCallback
     private WebSocketUploader wsClient;
     private LinearLayout voiceContainer;
     private String latestAudioUrl = null;
+    private MediaPlayer mediaPlayer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -87,17 +89,18 @@ public class AudioActivity extends AppCompatActivity implements AudioUrlCallback
             int expiration = 1800;
 
             String authorization = WebSocketAuthGenerator.generateAuthorization(xAppId, xAppKey, region, url, expiration, originName);
+            System.out.println("my authorization: " + authorization);
             URI uri = new URI(url); // 替换成实际地址
             Map<String, String> headers = new HashMap<>();
             headers.put("X-APP-ID", xAppId);
-            headers.put("Authorization", authorization);
-
+            headers.put("Authorization", "teleai-cloud-auth-v1/d0a488df365749648010ec85133e6273/SH/1746785349/1800/x-app-id/533035776f38f07eab480aaf2c533f2942fc6398a96344a0b585b56466632663");
             wsClient = new WebSocketUploader(uri, headers, (AudioUrlCallback) this);
             wsClient.connect();
 
             new Thread(() -> {
                 // 等待连接成功再发送 init
                 while (!wsClient.isOpen()) {
+//                    System.out.println("Audio 服务器链接中");
                     SystemClock.sleep(50);
                 }
 
@@ -115,6 +118,7 @@ public class AudioActivity extends AppCompatActivity implements AudioUrlCallback
                 byte[] buffer = new byte[bufferSize];
 
                 audioRecord.startRecording();
+                System.out.println("Audio成功录音");
                 isRecording = true;
                 while (isRecording && wsClient.isOpen()) {
                     int read = audioRecord.read(buffer, 0, buffer.length);
@@ -154,8 +158,25 @@ public class AudioActivity extends AppCompatActivity implements AudioUrlCallback
         voiceBtn.setLayoutParams(params);
         voiceBtn.setBackgroundColor(0xFFDDDDDD);
         voiceBtn.setAllCaps(false);
-
         voiceBtn.setOnClickListener(v -> {
+//            // 如果已经在播放，先释放
+//            if (mediaPlayer != null) {
+//                mediaPlayer.release();
+//                mediaPlayer = null;
+//            }
+//            mediaPlayer = new MediaPlayer();
+//            try {
+//                mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+//                mediaPlayer.setDataSource("https://example.com/audio/stream.mp3"); // 替换为真实地址
+//                mediaPlayer.setOnPreparedListener(MediaPlayer::start);
+//                mediaPlayer.setOnCompletionListener(mp -> {
+//                    mp.release();
+//                    mediaPlayer = null;
+//                });
+//                mediaPlayer.prepareAsync();
+//            } catch (IOException e) {
+//                e.printStackTrace();
+//            }
             if (latestAudioUrl != null) {
                 MediaPlayer mediaPlayer = new MediaPlayer();
                 try {
