@@ -6,7 +6,7 @@ import java.nio.charset.StandardCharsets;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-
+//鉴权生成器
 public class WebSocketAuthGenerator {
 
     // 将字节数组转换为十六进制字符串

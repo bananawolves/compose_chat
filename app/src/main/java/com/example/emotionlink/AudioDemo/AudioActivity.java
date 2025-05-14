@@ -29,6 +29,7 @@ import java.util.Map;
 import com.example.emotionlink.AudioDemo.Client.WebSocketAuthGenerator;
 import com.example.emotionlink.AudioDemo.Client.WebSocketUploader;
 
+//代码已经合并，目前已弃用
 public class AudioActivity extends AppCompatActivity implements AudioUrlCallback{
     private static final int REQUEST_PERMISSION_CODE = 1000;
     private static final int SAMPLE_RATE = 16000;
@@ -74,7 +75,7 @@ public class AudioActivity extends AppCompatActivity implements AudioUrlCallback
         latestAudioUrl = audioUrl;
     }
 
-    private void startStreaming() {
+    public void startStreaming() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             Toast.makeText(this, "未获得录音或存储权限", Toast.LENGTH_SHORT).show();
             return;
@@ -115,16 +116,26 @@ public class AudioActivity extends AppCompatActivity implements AudioUrlCallback
                         AudioFormat.CHANNEL_IN_MONO,
                         AudioFormat.ENCODING_PCM_16BIT,
                         bufferSize);
+                // 创建读取缓冲区
                 byte[] buffer = new byte[bufferSize];
+                int chunkSize = 400;
+                byte[] chunk = new byte[chunkSize * 2];
 
                 audioRecord.startRecording();
                 System.out.println("Audio成功录音");
                 isRecording = true;
                 while (isRecording && wsClient.isOpen()) {
                     int read = audioRecord.read(buffer, 0, buffer.length);
-                    if (read > 0) {
-                        wsClient.sendAudioChunk(buffer, read);
+                    int offset = 0;
+
+                    while (read - offset >= chunk.length) {
+                        System.arraycopy(buffer, offset, chunk, 0, chunk.length);
+                        wsClient.sendAudioChunk(chunk, chunk.length);
+                        offset += chunk.length;
                     }
+//                    if (read > 0) {
+//                        wsClient.sendAudioChunk(buffer, read);
+//                    }
                 }
                 audioRecord.stop();
                 audioRecord.release();

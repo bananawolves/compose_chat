@@ -10,10 +10,15 @@ import java.util.Base64;
 import java.util.Map;
 
 import com.example.emotionlink.AudioDemo.AudioUrlCallback;
+import com.example.emotionlink.AudioDemo.WebSocketStatusListener;
 
 public class WebSocketUploader extends WebSocketClient {
 
     private final AudioUrlCallback audioUrlCallback;
+    public WebSocketStatusListener statusListener; // 添加监听器字段
+    public void setStatusListener(WebSocketStatusListener listener) {
+        this.statusListener = listener;
+    }
 
     public WebSocketUploader(URI serverUri, Map<String, String> headers , AudioUrlCallback callback) {
         super(serverUri, headers);
@@ -23,6 +28,9 @@ public class WebSocketUploader extends WebSocketClient {
     @Override
     public void onOpen(ServerHandshake handshakedata) {
         System.out.println("Audio WebSocket opened");
+        if (statusListener != null) {
+            statusListener.onConnected();
+        }
     }
 
     public void sendInit() {
@@ -32,8 +40,8 @@ public class WebSocketUploader extends WebSocketClient {
             init.put("rec_status", 0);
             JSONObject option = new JSONObject();
             option.put("sample_rate", 16000);
-            option.put("enable_punctuation", true);
-            option.put("enable_inverse_text_normalization", true);
+            option.put("enable_punctuation", true);//测试用
+            option.put("enable_inverse_text_normalization", true);//
             init.put("option", option);
             send(init.toString());
         } catch (Exception e) {
@@ -45,11 +53,12 @@ public class WebSocketUploader extends WebSocketClient {
         try {
             byte[] chunk = new byte[length];
             System.arraycopy(audio, 0, chunk, 0, length);
-//            JSONObject audioObj = new JSONObject();
-//            audioObj.put("rec_status", 1);
+            JSONObject audioObj = new JSONObject();
+            audioObj.put("rec_status", 1);
+//            audioObj.put("language", "en");//后续根据传入的环境更改
 //            audioObj.put("audio_stream", Base64.getEncoder().encodeToString(chunk));
-//            send(audioObj.toString());
-            send(chunk);
+            send(audioObj.toString());
+//            send(chunk);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -83,10 +92,13 @@ public class WebSocketUploader extends WebSocketClient {
     @Override
     public void onError(Exception ex) {
         System.err.println("Audio WebSocket error: " + ex.getMessage());
+        if (statusListener != null) {
+            statusListener.onError(ex);
+        }
     }
 
     @Override
     public void onClose(int code, String reason, boolean remote) {
-        System.out.println("Audio WebSocket closed: " + reason);
+        System.out.println("WebSocket closed. Code: " + code + ", Reason: " + reason + ", Remote: " + remote);
     }
 }

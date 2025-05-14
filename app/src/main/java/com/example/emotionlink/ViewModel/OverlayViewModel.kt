@@ -1,26 +1,29 @@
 package com.example.emotionlink.ViewModel
 
+import android.content.Context
+import android.media.AudioRecord
+import android.media.MediaPlayer
 import android.media.MediaRecorder
-import android.util.Log
-import android.widget.Toast
-import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
-import timber.log.Timber
+import com.example.emotionlink.AudioDemo.AudioUrlCallback
+import com.example.emotionlink.AudioDemo.Client.WebSocketUploader
+import com.example.emotionlink.Repository.WebSocketAudioSender
 import java.io.File
-import kotlin.random.Random
 
-class OverlayViewModel : ViewModel() {
+class OverlayViewModel (private val context: Context): ViewModel() {
+    private var audioSender: WebSocketAudioSender? = null
     var released by mutableStateOf(false)
     private var mediaRecorder: MediaRecorder? = null
     private var outputFile: String? = null
     var inCancelZone by mutableStateOf(false)
     private var startTime: Long = 0
     private var endTime: Long = 0
-    var onVoiceMessageSent: ((String, String) -> Unit)? = null
+    var onVoiceMessageSent: ((String, String, String) -> Unit)? = null
 
     fun triggerReleased() {
-        Timber.d("OverlayViewModel", "triggerReleased 被调用，准备返回")
         stopRecording()
         released = true
     }
@@ -37,52 +40,64 @@ class OverlayViewModel : ViewModel() {
 
      fun startRecording() {
          println("录音开始")
-        try {
-            outputFile = File(
-                android.os.Environment.getExternalStoragePublicDirectory(
-                    android.os.Environment.DIRECTORY_DCIM
-                ).resolve("Sound"),
-                "recorded_audio_${System.currentTimeMillis()}.m4a"
-            ).absolutePath
-
-            // 确保目录存在
-            File(outputFile!!).parentFile?.mkdirs()
-
-            @Suppress("DEPRECATION")
-            mediaRecorder = MediaRecorder().apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setOutputFile(outputFile)
-                prepare()
-                start()
-            }
-            startTime = System.currentTimeMillis()
-        } catch (e: Exception) {
-            println("录音初始化失败: ${e.message}")
-        }
+         if (audioSender == null) {
+             audioSender = WebSocketAudioSender(context, object : AudioUrlCallback {
+                 override fun onAudioUrlReceived(audioUrl: String?) {
+//                     val duration = "5''" // 假设值
+//                     val recognizedText = "这是识别出的语音内容"
+//                     onVoiceMessageSent?.invoke(duration, recognizedText)
+                 }
+             })
+         }
+         startTime= System.currentTimeMillis()
+         audioSender?.startStreaming()
     }
 
     private fun stopRecording(cancel: Boolean = false) {
         try {
-            mediaRecorder?.apply {
-                stop()
-                release()
-            }
+            // 停止 WebSocket 实时录音
+            audioSender?.stopStreaming()
             endTime = System.currentTimeMillis()
-            mediaRecorder = null
 
-            if (cancel) {
-                File(outputFile!!).delete()
-                Timber.d("OverlayViewModel", "录音已取消")
-            } else {
-                val duration = "${(endTime - startTime) / 1000}''"
-                val recognizedText = "这是识别出的语音内容"
-                onVoiceMessageSent?.invoke(duration, recognizedText)
-            }
+            val duration = "${(endTime - startTime) / 1000}\""
+            println("startTime:"+startTime+"endTime:"+endTime+"duration:"+duration)
+            val recognizedText = "这是识别出的语音内容"
+
+                // 播放 WAV 音频
+//            val audioFile = File(context.filesDir, "recorded_audio.pcm")
+
+//            var wavFile = File(context.filesDir, "recorded_audio.wav")
+            val wavFile = audioSender!!.audioWavFile
+
+            println("录音文件大小: ${wavFile.length()} 字节")
+//            if (wavFile.exists()) {
+//                val mediaPlayer = MediaPlayer()
+//                mediaPlayer.setDataSource(wavFile.absolutePath)
+//                mediaPlayer.prepare()
+//                mediaPlayer.start()
+//            }
+            onVoiceMessageSent?.invoke(duration, recognizedText,wavFile.absolutePath)
+
         } catch (e: Exception) {
-            Timber.e("OverlayViewModel", "停止录音失败: ${e.message}")
+            e.printStackTrace()
         }
+//        try {
+//            mediaRecorder?.apply {
+//                stop()
+//                release()
+//            }
+//            endTime = System.currentTimeMillis()
+//            mediaRecorder = null
+//
+//            if (cancel) {
+//                File(outputFile!!).delete()
+//            } else {
+//                val duration = "${(endTime - startTime) / 1000}''"
+//                val recognizedText = "这是识别出的语音内容"
+//                onVoiceMessageSent?.invoke(duration, recognizedText)
+//            }
+//        } catch (e: Exception) {
+//        }
     }
 
     fun getRecordedInfo(): Pair<String, String>? {

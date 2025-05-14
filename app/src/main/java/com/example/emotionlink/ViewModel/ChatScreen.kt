@@ -1,14 +1,19 @@
 package com.example.emotionlink.ViewModel
 
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.MediaPlayer
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -57,9 +62,9 @@ fun ChatScreen(
     val backgroundColor = Color(0xFFF5F5F5)
     val language by langue_viewModel.language.collectAsState()
     var showOverlay by remember { mutableStateOf(false) }
-    val overlay_viewModel: OverlayViewModel = viewModel()
+    val context = LocalContext.current
+    val overlay_viewModel: OverlayViewModel = viewModel( factory = OverlayViewModelFactory(context))
     val chatMessages = remember { mutableStateListOf<ChatMessage.Voice>() }
-
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -183,7 +188,8 @@ fun ChatScreen(
                     ChatVoiceItem(
                         duration = message.duration,
                         isMe = message.isMe,
-                        textContent = message.textContent
+                        textContent = message.textContent,
+                        audioPath = message.audioPath
                     )
                 }
             }
@@ -194,12 +200,13 @@ fun ChatScreen(
             language=language,
             viewModel = overlay_viewModel.apply {
                 // 设置回调
-                onVoiceMessageSent = { duration, content ->
+                onVoiceMessageSent = { duration, content,path ->
                     chatMessages.add(
                         ChatMessage.Voice(
                             duration = duration,
                             textContent = content,
-                            isMe = true//后续需要根据后端返回数据做修改
+                            isMe = false,//后续需要根据后端返回数据做修改
+                            audioPath = path
                         )
                     )
                 }
@@ -236,7 +243,7 @@ fun OverlayDialog(
 
     // 初始化时执行
     LaunchedEffect(Unit) {
-        viewModel.startRecording()
+//        viewModel.startRecording()
     }
     LaunchedEffect(viewModel.released) {
         println("released"+viewModel.released)
@@ -307,7 +314,7 @@ fun OverlayDialog(
                     "en" -> "Cancel"
                     "dialect" -> "取消"
                     else -> "取消"},
-                color = if (isInCancelZone) Color.Black else Color.White, fontSize = 25.sp
+                color = if (isInCancelZone) Color.Black else Color.White, fontSize = 23.sp
             )
         }
 
@@ -351,13 +358,17 @@ fun OverlayDialog(
 
 
 @Composable
-fun ChatVoiceItem(duration: String, isMe: Boolean, textContent: String = "") {
+fun ChatVoiceItem(duration: String, isMe: Boolean, textContent: String = "",audioPath: String) {
     var showText by remember { mutableStateOf(false) }
     val durationSeconds = duration.filter { it.isDigit() }.toIntOrNull() ?: 1
     val minWidth = 80.dp
     val maxWidth = 220.dp
     val bubbleWidth = minWidth + (maxWidth - minWidth) * (durationSeconds.coerceAtMost(60) / 60f)
-
+    val context = LocalContext.current
+    var isPlaying by remember { mutableStateOf(false) }
+    LaunchedEffect(audioPath) {
+        isPlaying = AudioPlayerManager.isPlaying(audioPath)
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -374,7 +385,6 @@ fun ChatVoiceItem(duration: String, isMe: Boolean, textContent: String = "") {
             )
             Spacer(modifier = Modifier.width(8.dp))
         }
-
         Column(horizontalAlignment = if (isMe) Alignment.End else Alignment.Start) {
             Surface(
                 color = if (isMe) Color(0xFF9EEA6A) else Color.White,
@@ -383,7 +393,20 @@ fun ChatVoiceItem(duration: String, isMe: Boolean, textContent: String = "") {
                 modifier = Modifier.width(bubbleWidth)
             ) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically,modifier = Modifier.clickable {
+                        if (!AudioPlayerManager.isPlaying(audioPath)) {
+                            AudioPlayerManager.play(
+                                context = context,
+                                path = audioPath,
+                                onStarted = { isPlaying = true },
+                                onStopped = { isPlaying = false }
+                            )
+                        } else {
+                            AudioPlayerManager.stop()
+                            isPlaying = false
+                        }
+
+                    }) {
                         if (isMe) {
                             Icon(
                                 imageVector = Icons.Default.PlayArrow,
