@@ -4,13 +4,19 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.*
+import android.nfc.Tag
 import android.os.SystemClock
+import android.util.Log
 import android.widget.Toast
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.app.ActivityCompat
 import com.example.emotionlink.AudioDemo.AudioUrlCallback
 import com.example.emotionlink.AudioDemo.Client.WebSocketAuthGenerator
 import com.example.emotionlink.AudioDemo.Client.WebSocketUploader
 import com.example.emotionlink.AudioDemo.WebSocketStatusListener
+import com.example.emotionlink.ViewModel.LanguageViewModel
+import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -19,7 +25,8 @@ import java.net.URI
 
 class WebSocketAudioSender(
     private val context: Context,
-    private val callback: AudioUrlCallback
+    private val callback: AudioUrlCallback,
+    private var language: String = "zh"
 ) {
     private var wsClient: WebSocketUploader? = null
     private var audioRecord: AudioRecord? = null
@@ -33,43 +40,41 @@ class WebSocketAudioSender(
     private lateinit var audioFile: File
     lateinit var audioWavFile: File
     private lateinit var outputStream: FileOutputStream
-
+    val Tag="WebSocketAudioSender"
+    fun setLanguage(newLang: String) {
+        this.language = newLang
+        Log.d(Tag, "语言已更新为 $language")
+    }
     fun startStreaming() {
 
-
-        println("进入java录音")
-
-
+        Log.d(Tag,"进入java录音")
         try {
-            val xAppId = "d0a488df365749648010ec85133e6273"
-            val xAppKey = "40c27006325c480a804c4162c9234b60"
-            val region = "SH"
-            val url = "wss://openapi.teleagi.cn:443/aipaas/voice/v1/asr/fy"
-            val expiration = 1800
-            val originName = "teleai-cloud-auth-v1"
+            val groupId = "JQBHLtzmz8uxUpV9sexxbJ"
+            val userId = when (language) {
+                "ch" -> "h7tX4B5KHETk2dkjVjVnwx"
+                "en" -> "VT6iqWi98w9cXPfuxkHqzM"
+                "sh" -> "Djehfea5ErSfC6ZrbHSfxH"
+                else -> ""
+            }
 
-            val authorization = WebSocketAuthGenerator.generateAuthorization(
-                xAppId, xAppKey, region, url, expiration, originName
-            )
+
+            val url = "ws://158.178.230.179:60688/waic/apitest/start_chat/?group_id=$groupId&user_id=$userId"
             val uri = URI(url)
-            val headers = mapOf(
-                "X-APP-ID" to xAppId,
-                "Authorization" to "teleai-cloud-auth-v1/d0a488df365749648010ec85133e6273/SH/1747203694/1800/x-app-id/1a5f26bdb4e18a96b0c4614e4ffa8e6306a9110900d5c536c3b1a270e8acaa5c"
-            )
+
             currentIndex = instanceCount++
             audioFile = File(context.filesDir, "recorded_audio_$currentIndex.pcm")
             audioWavFile = File(context.filesDir, "recorded_audio_$currentIndex.wav")
-            println("当前录音文件名: ${audioFile.name}")
+            Log.d(Tag,"当前录音文件名: ${audioFile.name}")
+
             outputStream = FileOutputStream(audioFile)
-            wsClient = WebSocketUploader(uri, headers, callback).apply {
+            wsClient = WebSocketUploader(uri, callback).apply {
                 statusListener = object : WebSocketStatusListener {
                     override fun onConnected() {
-                        println("WebSocket 准备就绪，开始录音")
-                        startAudioRecordingLoop() // 把原来录音线程逻辑提出来放这里
+                        Log.d(Tag,"WebSocket 准备就绪，开始录音")
+                        startAudioRecordingLoop()
                     }
-
                     override fun onError(e: Exception) {
-                        println("WebSocket 连接失败：$e")
+                        Log.d(Tag,"WebSocket 连接失败：$e")
                     }
                 }
                 connect()
@@ -126,7 +131,6 @@ class WebSocketAudioSender(
     }
 
     fun stopStreaming() {
-        var Name= System.currentTimeMillis()
         isRecording = false
         synchronized(fileLock) {
             outputStream.flush()
@@ -187,5 +191,5 @@ class WebSocketAudioSender(
         b[offset] = (value.toInt() and 0xff).toByte()
         b[offset + 1] = ((value.toInt() shr 8) and 0xff).toByte()
     }
-
 }
+

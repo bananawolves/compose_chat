@@ -90,18 +90,16 @@ public class AudioActivity extends AppCompatActivity implements AudioUrlCallback
             int expiration = 1800;
 
             String authorization = WebSocketAuthGenerator.generateAuthorization(xAppId, xAppKey, region, url, expiration, originName);
-            System.out.println("my authorization: " + authorization);
             URI uri = new URI(url); // 替换成实际地址
             Map<String, String> headers = new HashMap<>();
             headers.put("X-APP-ID", xAppId);
             headers.put("Authorization", "teleai-cloud-auth-v1/d0a488df365749648010ec85133e6273/SH/1746785349/1800/x-app-id/533035776f38f07eab480aaf2c533f2942fc6398a96344a0b585b56466632663");
-            wsClient = new WebSocketUploader(uri, headers, (AudioUrlCallback) this);
+            wsClient = new WebSocketUploader(uri, (AudioUrlCallback) this);
             wsClient.connect();
 
             new Thread(() -> {
                 // 等待连接成功再发送 init
                 while (!wsClient.isOpen()) {
-//                    System.out.println("Audio 服务器链接中");
                     SystemClock.sleep(50);
                 }
 
@@ -122,7 +120,6 @@ public class AudioActivity extends AppCompatActivity implements AudioUrlCallback
                 byte[] chunk = new byte[chunkSize * 2];
 
                 audioRecord.startRecording();
-                System.out.println("Audio成功录音");
                 isRecording = true;
                 while (isRecording && wsClient.isOpen()) {
                     int read = audioRecord.read(buffer, 0, buffer.length);

@@ -45,42 +45,46 @@ import android.media.MediaRecorder
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.emotionlink.ViewModel.ChatScreen
 import com.example.emotionlink.ViewModel.HomeViewModel
 import com.example.emotionlink.ViewModel.LanguageViewModel
 import com.example.emotionlink.ViewModel.OverlayViewModel
+import com.example.emotionlink.ViewModel.SettingsScreen
 import timber.log.Timber
 
 
 class MainActivity : ComponentActivity() {
-    private lateinit var viewModel: LanguageViewModel
+    private lateinit var languageViewModel: LanguageViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        viewModel = androidx.lifecycle.ViewModelProvider(this)[LanguageViewModel::class.java]
+        languageViewModel = ViewModelProvider(this)[LanguageViewModel::class.java]
+
         enableEdgeToEdge()
+
         setContent {
-            ChatScreen(
-                langue_viewModel = viewModel,
-                onRecordButtonPressed = { /* 触发显示 Overlay 的状态，而不是 navigate */ },
-                onLanguageSelected = { lang -> viewModel.setLanguage(lang) }
-            )
-//            val navController = rememberNavController()
-//            NavHost(navController = navController, startDestination = "chat") {
-//                composable("chat") {
-//                    ChatScreen(
-//                        viewModel=viewModel,
-//                        onRecordButtonPressed = {
-//                            navController.navigate("overlay") // 这里跳转
-//                        },
-//                        onLanguageSelected = { lang -> viewModel.setLanguage(lang) }
-//                    )
-//                }
-//                composable("overlay") {
-//                    OverlayScreen(navController)
-//                }
-//            }
+            var currentScreen by remember { mutableStateOf("chat") }
+
+            when (currentScreen) {
+                "chat" -> ChatScreen(
+                    langue_viewModel = languageViewModel,
+                    onLanguageSelected = { lang -> languageViewModel.setLanguage(lang) },
+                    onNavigateToSettings = {
+                        currentScreen = "settings"
+                    }
+                )
+                "settings" -> SettingsScreen(
+                    onLanguageChosen = { lang ->
+                        languageViewModel.setLanguage(lang)
+                        currentScreen = "chat"
+                    },
+                    onBack = {
+                        currentScreen = "chat"
+                    }
+                )
+            }
         }
     }
 }

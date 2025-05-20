@@ -1,28 +1,47 @@
 package com.example.emotionlink.ViewModel
 
+import android.R
 import android.content.Context
 import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.media.MediaRecorder
+import android.nfc.Tag
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.emotionlink.AudioDemo.AudioUrlCallback
 import com.example.emotionlink.AudioDemo.Client.WebSocketUploader
 import com.example.emotionlink.Repository.WebSocketAudioSender
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import java.io.File
 
-class OverlayViewModel (private val context: Context): ViewModel() {
+class OverlayViewModel (private val context: Context,
+                        private val languageViewModel: LanguageViewModel
+): ViewModel() {
+
     private var audioSender: WebSocketAudioSender? = null
     var released by mutableStateOf(false)
-    private var mediaRecorder: MediaRecorder? = null
     private var outputFile: String? = null
     var inCancelZone by mutableStateOf(false)
     private var startTime: Long = 0
     private var endTime: Long = 0
     var onVoiceMessageSent: ((String, String, String) -> Unit)? = null
+    val Tag="OverlayViewModel"
+    private var latestLanguage: String = "zh" // 设置默认语言
 
+    init {
+        viewModelScope.launch {
+            languageViewModel.language.collectLatest { lang ->
+                Log.d(Tag, "语言发生变化: $lang")
+                latestLanguage = lang // 缓存语言
+                audioSender?.setLanguage(lang) // 若已有 sender，则更新语言
+            }
+        }
+    }
     fun triggerReleased() {
         stopRecording()
         released = true
@@ -39,7 +58,7 @@ class OverlayViewModel (private val context: Context): ViewModel() {
     }
 
      fun startRecording() {
-         println("录音开始")
+         Log.d(Tag,"录音开始")
          if (audioSender == null) {
              audioSender = WebSocketAudioSender(context, object : AudioUrlCallback {
                  override fun onAudioUrlReceived(audioUrl: String?) {
@@ -47,7 +66,7 @@ class OverlayViewModel (private val context: Context): ViewModel() {
 //                     val recognizedText = "这是识别出的语音内容"
 //                     onVoiceMessageSent?.invoke(duration, recognizedText)
                  }
-             })
+             }).apply { setLanguage(latestLanguage) }
          }
          startTime= System.currentTimeMillis()
          audioSender?.startStreaming()
@@ -60,44 +79,20 @@ class OverlayViewModel (private val context: Context): ViewModel() {
             endTime = System.currentTimeMillis()
 
             val duration = "${(endTime - startTime) / 1000}\""
-            println("startTime:"+startTime+"endTime:"+endTime+"duration:"+duration)
+            Log.d(Tag,"startTime:"+startTime+"endTime:"+endTime+"duration:"+duration)
             val recognizedText = "这是识别出的语音内容"
-
-                // 播放 WAV 音频
-//            val audioFile = File(context.filesDir, "recorded_audio.pcm")
-
-//            var wavFile = File(context.filesDir, "recorded_audio.wav")
-            val wavFile = audioSender!!.audioWavFile
-
-            println("录音文件大小: ${wavFile.length()} 字节")
-//            if (wavFile.exists()) {
-//                val mediaPlayer = MediaPlayer()
-//                mediaPlayer.setDataSource(wavFile.absolutePath)
-//                mediaPlayer.prepare()
-//                mediaPlayer.start()
-//            }
-            onVoiceMessageSent?.invoke(duration, recognizedText,wavFile.absolutePath)
+//            val wavFile = audioSender!!.audioWavFile
+//            Log.d(Tag,"录音文件大小: ${wavFile.length()} 字节")
+//            onVoiceMessageSent?.invoke(duration, recognizedText,wavFile.absolutePath)
+            audioSender?.let { sender ->
+                val wavFile = sender.audioWavFile
+                Log.d(Tag, "录音文件大小: ${wavFile.length()} 字节")
+                onVoiceMessageSent?.invoke(duration, recognizedText, wavFile.absolutePath)
+            }
 
         } catch (e: Exception) {
             e.printStackTrace()
         }
-//        try {
-//            mediaRecorder?.apply {
-//                stop()
-//                release()
-//            }
-//            endTime = System.currentTimeMillis()
-//            mediaRecorder = null
-//
-//            if (cancel) {
-//                File(outputFile!!).delete()
-//            } else {
-//                val duration = "${(endTime - startTime) / 1000}''"
-//                val recognizedText = "这是识别出的语音内容"
-//                onVoiceMessageSent?.invoke(duration, recognizedText)
-//            }
-//        } catch (e: Exception) {
-//        }
     }
 
     fun getRecordedInfo(): Pair<String, String>? {

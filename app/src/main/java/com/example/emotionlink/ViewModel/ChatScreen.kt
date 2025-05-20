@@ -1,13 +1,8 @@
 package com.example.emotionlink.ViewModel
 
-import android.media.AudioAttributes
-import android.media.AudioManager
-import android.media.MediaPlayer
-import android.util.Log
-import android.widget.Toast
+import AudioPlayerManager
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -16,55 +11,76 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.emotionlink.ViewModel.ChatMessage
-import androidx.navigation.compose.rememberNavController
-import kotlinx.coroutines.time.delay
-import timber.log.Timber
-import kotlin.concurrent.timer
-import kotlin.math.log
+import com.example.emotionlink.data.ChatMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 //@Preview
 @Composable
 fun ChatScreen(
     langue_viewModel: LanguageViewModel,
-    onRecordButtonPressed: () -> Unit,
-    onLanguageSelected: (String) -> Unit
+    onLanguageSelected: (String) -> Unit,
+    onNavigateToSettings: () -> Unit,
+    chatViewModel: ChatViewModel = viewModel()
 ) {
     val backgroundColor = Color(0xFFF5F5F5)
     val language by langue_viewModel.language.collectAsState()
     var showOverlay by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val overlay_viewModel: OverlayViewModel = viewModel( factory = OverlayViewModelFactory(context))
-    val chatMessages = remember { mutableStateListOf<ChatMessage.Voice>() }
+    val overlay_viewModel: OverlayViewModel = viewModel( factory = OverlayViewModelFactory(context,langue_viewModel))
+    val chatMessages by chatViewModel.chatVoiceItems.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -94,40 +110,8 @@ fun ChatScreen(
                         }
                     },
                     actions = {
-                        var expanded by remember { mutableStateOf(false) }
-
-                        IconButton(onClick = { expanded = true }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = "更多"
-                            )
-                        }
-
-                        DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Chinese") },
-                                onClick = {
-                                    expanded = false
-                                    onLanguageSelected("zh")
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("English") },
-                                onClick = {
-                                    expanded = false
-                                    onLanguageSelected("en")
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Dialect") },
-                                onClick = {
-                                    expanded = false
-                                    onLanguageSelected("dialect")
-                                }
-                            )
+                        IconButton(onClick = { onNavigateToSettings()  }) {
+                            Icon(Icons.Default.Settings, contentDescription = "设置")
                         }
                     }
                 )
@@ -156,9 +140,6 @@ fun ChatScreen(
                                         do {
                                             val event = awaitPointerEvent()
                                         } while (event.changes.any { it.pressed })
-                                        println("while后面")
-
-//                                        overlay_viewModel.triggerReleased()
                                     }
                                 }
                             },
@@ -201,11 +182,12 @@ fun ChatScreen(
             viewModel = overlay_viewModel.apply {
                 // 设置回调
                 onVoiceMessageSent = { duration, content,path ->
-                    chatMessages.add(
+//                    chatMessages.add(
+                    chatViewModel.addVoiceMessage( //用chatViewModel管理
                         ChatMessage.Voice(
                             duration = duration,
                             textContent = content,
-                            isMe = false,//后续需要根据后端返回数据做修改
+                            isMe = true,//后续需要根据后端返回数据做修改
                             audioPath = path
                         )
                     )
@@ -241,25 +223,6 @@ fun OverlayDialog(
         label = "mic_bounce"
     )
 
-    // 初始化时执行
-    LaunchedEffect(Unit) {
-//        viewModel.startRecording()
-    }
-    LaunchedEffect(viewModel.released) {
-        println("released"+viewModel.released)
-//        if (viewModel.released) {
-//            if (!viewModel.inCancelZone) {
-//                val recordedInfo = viewModel.getRecordedInfo()
-//                recordedInfo?.let { (duration, content) ->
-//                    onVoiceMessageSent(duration, content)
-//                }
-//            }
-//            viewModel.onExitScreen()
-//            onDismiss()
-//        }
-    }
-
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -278,11 +241,9 @@ fun OverlayDialog(
                     },
                     onDragEnd = {
                         if (isInCancelZone) {
-                            println("取消了")
                             viewModel.cancelRecording()
                             onDismiss()
                         } else {
-                            println("松手了")
                             viewModel.triggerReleased()
                             onDismiss()
                         }
@@ -366,6 +327,7 @@ fun ChatVoiceItem(duration: String, isMe: Boolean, textContent: String = "",audi
     val bubbleWidth = minWidth + (maxWidth - minWidth) * (durationSeconds.coerceAtMost(60) / 60f)
     val context = LocalContext.current
     var isPlaying by remember { mutableStateOf(false) }
+//    val avatarUri = UserProfileManager.avatarUri
     LaunchedEffect(audioPath) {
         isPlaying = AudioPlayerManager.isPlaying(audioPath)
     }
@@ -385,6 +347,7 @@ fun ChatVoiceItem(duration: String, isMe: Boolean, textContent: String = "",audi
             )
             Spacer(modifier = Modifier.width(8.dp))
         }
+
         Column(horizontalAlignment = if (isMe) Alignment.End else Alignment.Start) {
             Surface(
                 color = if (isMe) Color(0xFF9EEA6A) else Color.White,
@@ -455,9 +418,18 @@ fun ChatVoiceItem(duration: String, isMe: Boolean, textContent: String = "",audi
                 )
             }
         }
-
         if (isMe) {
+
             Spacer(modifier = Modifier.width(8.dp))
+//            AsyncImage(
+//                model = avatarUri,
+//                contentDescription = "头像",
+//                modifier = Modifier
+//                    .size(36.dp)
+//                    .align(Alignment.Top)
+//                    .clip(CircleShape),
+//                contentScale = ContentScale.Crop
+//            )
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -466,6 +438,7 @@ fun ChatVoiceItem(duration: String, isMe: Boolean, textContent: String = "",audi
                     .background(Color.Gray)
             )
         }
+
     }
 }
 

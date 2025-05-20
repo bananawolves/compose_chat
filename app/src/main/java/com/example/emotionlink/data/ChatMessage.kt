@@ -1,5 +1,4 @@
-package com.example.emotionlink.ViewModel
-
+package com.example.emotionlink.data
 
 sealed class ChatMessage {
     data class Voice(
