@@ -4,7 +4,7 @@ import android.media.MediaPlayer
 
 object AudioPlayerManager {
     private var mediaPlayer: MediaPlayer? = null
-     var currentPath: String? = null
+    var currentPath: String? = null
     private var onCompletion: (() -> Unit)? = null
 
     fun play(

@@ -1,6 +1,7 @@
 package com.example.emotionlink.ViewModel
 
 import AudioPlayerManager
+import android.util.Log
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -47,7 +48,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -67,7 +67,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.emotionlink.data.ChatMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
-//@Preview
 @Composable
 fun ChatScreen(
     langue_viewModel: LanguageViewModel,
@@ -79,7 +78,9 @@ fun ChatScreen(
     val language by langue_viewModel.language.collectAsState()
     var showOverlay by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val overlay_viewModel: OverlayViewModel = viewModel( factory = OverlayViewModelFactory(context,langue_viewModel))
+    val overlay_viewModel: OverlayViewModel =
+        viewModel(factory = OverlayViewModelFactory(context, langue_viewModel))
+    val isReceive by overlay_viewModel.isReceive.collectAsState()
     val chatMessages by chatViewModel.chatVoiceItems.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -110,7 +111,7 @@ fun ChatScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { onNavigateToSettings()  }) {
+                        IconButton(onClick = { onNavigateToSettings() }) {
                             Icon(Icons.Default.Settings, contentDescription = "设置")
                         }
                     }
@@ -133,7 +134,8 @@ fun ChatScreen(
                             .pointerInput(Unit) {
                                 while (true) {
                                     awaitPointerEventScope {
-                                        val down = awaitFirstDown(requireUnconsumed = false) // 允许消费过的事件
+                                        val down =
+                                            awaitFirstDown(requireUnconsumed = false) // 允许消费过的事件
                                         overlay_viewModel.resetReleased()
                                         showOverlay = true
                                         // 等待松手或取消
@@ -145,13 +147,15 @@ fun ChatScreen(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text( text = when (language) {
-                            "zh" -> "按住 说话"
-                            "en" -> "Hold to Talk"
-                            "dialect" -> "揿牢 讲闲话"
-                            else -> "按住 说话"
-                        },
-                            color = Color.Black)
+                        Text(
+                            text = when (language) {
+                                "zh" -> "按住 说话"
+                                "en" -> "Hold to Talk"
+                                "dialect" -> "揿牢 讲闲话"
+                                else -> "按住 说话"
+                            },
+                            color = Color.Black
+                        )
                     }
                 }
             }
@@ -166,42 +170,180 @@ fun ChatScreen(
             ) {
                 items(chatMessages.size) { index ->
                     val message = chatMessages[index]
-                    ChatVoiceItem(
-                        duration = message.duration,
-                        isMe = message.isMe,
-                        textContent = message.textContent,
-                        audioPath = message.audioPath
-                    )
+                    ChatVoiceItem(message = message, currentLanguage = language)
                 }
             }
         }
     }
+
+    //解决首次登录时需要发送音频才能接收消息的问题（初始化就可以接收回调）
+    LaunchedEffect(isReceive) {
+        Log.d("ChatScreen", "运行了")
+        overlay_viewModel.onVoiceMessageSent = { duration, content, isMe, audioUrl ->
+            Log.d("ChatScreen", "持续时间$duration,文本内容$content,音频地址: $audioUrl")
+            chatViewModel.addVoiceMessage( //用chatViewModel管理
+                ChatMessage.Voice(
+                    duration = duration,
+                    textContent = content,
+                    isMe = isMe,//后续需要根据后端返回数据做修改
+                    audioUrl = audioUrl
+                )
+            )
+        }
+        overlay_viewModel.setReceiveState(false)
+    }
+
     if (showOverlay) {
         OverlayDialog(
-            language=language,
-            viewModel = overlay_viewModel.apply {
-                // 设置回调
-                onVoiceMessageSent = { duration, content,path ->
-//                    chatMessages.add(
-                    chatViewModel.addVoiceMessage( //用chatViewModel管理
-                        ChatMessage.Voice(
-                            duration = duration,
-                            textContent = content,
-                            isMe = true,//后续需要根据后端返回数据做修改
-                            audioPath = path
-                        )
-                    )
-                }
-            },
+            language = language,
+            viewModel = overlay_viewModel,
             onDismiss = { showOverlay = false },
         )
     }
 }
 
+@Composable
+fun ChatVoiceItem(message: ChatMessage.Voice, currentLanguage: String) {
+    var showText by remember { mutableStateOf(false) }
+    val durationSeconds = message.duration.filter { it.isDigit() }.toIntOrNull() ?: 1
+    val minWidth = 80.dp
+    val maxWidth = 220.dp
+    val bubbleWidth = minWidth + (maxWidth - minWidth) * (durationSeconds.coerceAtMost(60) / 60f)
+    val context = LocalContext.current
+    var isPlaying by remember { mutableStateOf(false) }
+    val audioPath = message.getAudioPath()
+//    val avatarUri = UserProfileManager.avatarUri
+    LaunchedEffect(audioPath) {
+        isPlaying = AudioPlayerManager.isPlaying(audioPath)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = if (message.isMe) Arrangement.End else Arrangement.Start
+    ) {
+        if (!message.isMe) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color.Gray)
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+
+        Column(horizontalAlignment = if (message.isMe) Alignment.End else Alignment.Start) {
+            if (message.isMe) {
+                // 自己的名字显示在右侧气泡上方
+                Text(
+                    text = currentLanguage,
+                    fontSize = 12.sp,
+                    color = Color.Gray,
+                    modifier = Modifier
+                        .padding(end = 4.dp, bottom = 2.dp)
+                        .align(Alignment.End)
+                )
+            } else {
+                Text(
+                    text = currentLanguage,
+                    fontSize = 12.sp,
+                    color = Color.Gray,
+                    modifier = Modifier
+                        .padding(end = 4.dp, bottom = 2.dp)
+                        .align(Alignment.Start)
+                )
+            }
+            Surface(
+                color = if (message.isMe) Color(0xFF9EEA6A) else Color.White,
+                shape = MaterialTheme.shapes.medium,
+                tonalElevation = 2.dp,
+                modifier = Modifier.width(bubbleWidth)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable {
+                            if (!AudioPlayerManager.isPlaying(audioPath)) {
+                                AudioPlayerManager.play(
+                                    context = context,
+                                    path = audioPath,
+                                    onStarted = { isPlaying = true },
+                                    onStopped = { isPlaying = false }
+                                )
+                            } else {
+                                AudioPlayerManager.stop()
+                                isPlaying = false
+                            }
+
+                        }) {
+                        if (message.isMe) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "语音播放",
+                                tint = Color.Black
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(message.duration, fontSize = 14.sp, color = Color.Black)
+
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "语音播放",
+                                tint = Color.Black
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(message.duration, fontSize = 14.sp, color = Color.Black)
+                        }
+                    }
+                    if (showText) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        var visibleText by remember { mutableStateOf("") }
+                        LaunchedEffect(message.textContent) {
+                            visibleText = ""
+                            for (i in message.textContent.indices) {
+                                visibleText += message.textContent[i]
+                                kotlinx.coroutines.delay(30)
+                            }
+                        }
+                        Text(
+                            text = visibleText,
+                            fontSize = 13.sp,
+                            color = Color.DarkGray
+                        )
+                    }
+                }
+            }
+            TextButton(
+                onClick = { showText = !showText },
+                modifier = Modifier.defaultMinSize(minHeight = 16.dp)
+            ) {
+                Text(
+                    if (showText) "收起" else "转文字",
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+            }
+        }
+        if (message.isMe) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color.Gray)
+                )
+            }
+        }
+
+    }
+}
 
 @Composable
 fun OverlayDialog(
-    language:String,
+    language: String,
     onDismiss: () -> Unit,
     viewModel: OverlayViewModel,
 ) {
@@ -264,7 +406,10 @@ fun OverlayDialog(
                 .align(Alignment.Center)
                 .offset(y = (20).dp)
                 .onGloballyPositioned { coords -> cancelZoneLoaction = coords.boundsInRoot() }
-                .background(if (isInCancelZone) Color(0xFFD32F2F) else Color.LightGray, shape = CircleShape)
+                .background(
+                    if (isInCancelZone) Color(0xFFD32F2F) else Color.LightGray,
+                    shape = CircleShape
+                )
                 .clip(RoundedCornerShape(50))
                 .padding(horizontal = 24.dp, vertical = 12.dp),
             contentAlignment = Alignment.Center
@@ -274,7 +419,8 @@ fun OverlayDialog(
                     "zh" -> "取消"
                     "en" -> "Cancel"
                     "dialect" -> "取消"
-                    else -> "取消"},
+                    else -> "取消"
+                },
                 color = if (isInCancelZone) Color.Black else Color.White, fontSize = 23.sp
             )
         }
@@ -285,7 +431,8 @@ fun OverlayDialog(
                 "zh" -> "松开发送文字"
                 "en" -> "Release to Send"
                 "dialect" -> "放手发送"
-                else -> "松开发送文字"},
+                else -> "松开发送文字"
+            },
             color = Color.White,
             modifier = Modifier
                 .align(Alignment.Center)
@@ -314,131 +461,6 @@ fun OverlayDialog(
                     .offset(y = micOffset.dp)
             )
         }
-    }
-}
-
-
-@Composable
-fun ChatVoiceItem(duration: String, isMe: Boolean, textContent: String = "",audioPath: String) {
-    var showText by remember { mutableStateOf(false) }
-    val durationSeconds = duration.filter { it.isDigit() }.toIntOrNull() ?: 1
-    val minWidth = 80.dp
-    val maxWidth = 220.dp
-    val bubbleWidth = minWidth + (maxWidth - minWidth) * (durationSeconds.coerceAtMost(60) / 60f)
-    val context = LocalContext.current
-    var isPlaying by remember { mutableStateOf(false) }
-//    val avatarUri = UserProfileManager.avatarUri
-    LaunchedEffect(audioPath) {
-        isPlaying = AudioPlayerManager.isPlaying(audioPath)
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
-    ) {
-        if (!isMe) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .align(Alignment.Top)
-                    .clip(CircleShape)
-                    .background(Color.Gray)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-        }
-
-        Column(horizontalAlignment = if (isMe) Alignment.End else Alignment.Start) {
-            Surface(
-                color = if (isMe) Color(0xFF9EEA6A) else Color.White,
-                shape = MaterialTheme.shapes.medium,
-                tonalElevation = 2.dp,
-                modifier = Modifier.width(bubbleWidth)
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically,modifier = Modifier.clickable {
-                        if (!AudioPlayerManager.isPlaying(audioPath)) {
-                            AudioPlayerManager.play(
-                                context = context,
-                                path = audioPath,
-                                onStarted = { isPlaying = true },
-                                onStopped = { isPlaying = false }
-                            )
-                        } else {
-                            AudioPlayerManager.stop()
-                            isPlaying = false
-                        }
-
-                    }) {
-                        if (isMe) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "语音播放",
-                                tint = Color.Black
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(duration, fontSize = 14.sp, color = Color.Black)
-
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "语音播放",
-                                tint = Color.Black
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(duration, fontSize = 14.sp, color = Color.Black)
-                        }
-                    }
-                    if (showText) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        var visibleText by remember { mutableStateOf("") }
-                        LaunchedEffect(textContent) {
-                            visibleText = ""
-                            for (i in textContent.indices) {
-                                visibleText += textContent[i]
-                                kotlinx.coroutines.delay(30)
-                            }
-                        }
-                        Text(
-                            text = visibleText,
-                            fontSize = 13.sp,
-                            color = Color.DarkGray
-                        )
-                    }
-                }
-            }
-            TextButton(
-                onClick = { showText = !showText },
-                modifier = Modifier.defaultMinSize(minHeight = 16.dp)
-            ) {
-                Text(
-                    if (showText) "收起" else "转文字",
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
-            }
-        }
-        if (isMe) {
-
-            Spacer(modifier = Modifier.width(8.dp))
-//            AsyncImage(
-//                model = avatarUri,
-//                contentDescription = "头像",
-//                modifier = Modifier
-//                    .size(36.dp)
-//                    .align(Alignment.Top)
-//                    .clip(CircleShape),
-//                contentScale = ContentScale.Crop
-//            )
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .align(Alignment.Top)
-                    .clip(CircleShape)
-                    .background(Color.Gray)
-            )
-        }
-
     }
 }
 

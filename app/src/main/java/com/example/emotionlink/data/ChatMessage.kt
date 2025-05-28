@@ -4,7 +4,11 @@ sealed class ChatMessage {
     data class Voice(
         val duration: String,
         val textContent: String,
-        val isMe: Boolean = true,
-        val audioPath: String // 添加音频路径
-    ) : ChatMessage()
+        val isMe: Boolean,
+        val audioUrl: String // 单个音频路径或 URL
+    ) : ChatMessage() {
+        fun getAudioPath(): String {
+            return audioUrl
+        }
+    }
 }
