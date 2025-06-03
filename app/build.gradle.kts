@@ -40,7 +40,9 @@ android {
 }
 
 dependencies {
-    implementation ("androidx.datastore:datastore-preferences:1.0.0")
+    implementation("com.squareup.retrofit2:retrofit:2.6.1")
+    implementation("com.squareup.retrofit2:converter-gson:2.6.1")
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
     implementation("io.coil-kt:coil-compose:2.2.2")
     implementation("org.java-websocket:Java-WebSocket:1.5.3")
     implementation("androidx.compose.material:material-icons-extended:1.5.4")

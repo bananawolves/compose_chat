@@ -1,6 +1,5 @@
 package com.example.emotionlink.Repository
 
-//import kotlin.io.encoding.Base64
 import android.util.Log
 import com.example.emotionlink.AudioDemo.WebSocketStatusListener
 import kotlinx.coroutines.CoroutineScope
@@ -17,6 +16,7 @@ import okhttp3.WebSocketListener
 import okio.ByteString
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 class WebSocketUploader(
@@ -52,7 +52,6 @@ class WebSocketUploader(
             override fun onMessage(webSocket: WebSocket, text: String) {
                 Log.d(TAG, "Received: $text")
                 handleWebSocketMessage(text, messageCallback)
-//                handleMessage(text)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
@@ -81,6 +80,7 @@ class WebSocketUploader(
         heartbeatJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
                 delay(10_000)
+                Log.d(TAG, "发送ping")
                 send("ping")
             }
         }
@@ -95,6 +95,7 @@ class WebSocketUploader(
         isReconnecting = true
         CoroutineScope(Dispatchers.IO).launch {
             delay(5_000)
+            Log.d(TAG, "尝试重连")
             webSocket = null
             connect()
             isReconnecting = false
@@ -125,7 +126,7 @@ class WebSocketUploader(
                 put("msg_type", "chunk_info")
                 put("chunk_id", chunkId)
                 put("status", "start")
-                put("chunk_size", length)
+                put("chunk_size", length/2)//1280
             }
             webSocket?.send(meta.toString())
 
@@ -138,12 +139,13 @@ class WebSocketUploader(
         }
     }
 
-    fun sendEnd(duration: String) {
+    fun sendEnd(duration: String,inCancelZone: Boolean) {
         try {
+            val status = if (inCancelZone) "discard" else "end"
             val end = JSONObject().apply {
                 put("msg_type", "chunk_info")
-                put("chunk_id", chunkId)
-                put("status", "end")
+                put("chunk_id", "-1")
+                put("status", status)
                 put("chunk_size", 0)
                 put("duration", duration)
             }

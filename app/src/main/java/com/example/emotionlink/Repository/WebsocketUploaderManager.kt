@@ -32,6 +32,7 @@ object WebsocketUploaderManager {
             else -> ""
         }
         Log.d("WebsocketUploaderManager",userId)
-        return "http://10.18.63.60:8000/waic/apitest/start_chat/?group_id=$groupId&user_id=$userId"
+//        return "http://10.18.63.60:8000/waic/apitest/start_chat/?group_id=$groupId&user_id=$userId"
+        return "ws://117.160.123.34:43073/waic/apitest/start_chat/?group_id=$groupId&user_id=$userId"
     }
 }

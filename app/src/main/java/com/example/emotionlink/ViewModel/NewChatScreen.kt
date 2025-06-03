@@ -2,6 +2,9 @@ package com.example.emotionlink.ViewModel
 
 import AudioPlayerManager
 import android.util.Log
+import android.view.Gravity
+import android.view.View.TEXT_ALIGNMENT_CENTER
+import android.widget.Toast
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -18,16 +21,21 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
@@ -63,12 +72,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.emotionlink.RecordButton
+import com.example.emotionlink.RecordButton.OnFinishedRecordListener
 import com.example.emotionlink.data.ChatMessage
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(
+fun NewChatScreen(
     langue_viewModel: LanguageViewModel,
     onLanguageSelected: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
@@ -121,42 +134,39 @@ fun ChatScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(120.dp)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(WindowInsets.navigationBars.asPaddingValues()) //避开手机自带的底部导航栏遮挡
+
+                        .height(80.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(
+                    AndroidView(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFF5F5F5))
-                            .pointerInput(Unit) {
-                                while (true) {
-                                    awaitPointerEventScope {
-                                        val down =
-                                            awaitFirstDown(requireUnconsumed = false) // 允许消费过的事件
-                                        overlay_viewModel.resetReleased()
-                                        showOverlay = true
-                                        // 等待松手或取消
-                                        do {
-                                            val event = awaitPointerEvent()
-                                        } while (event.changes.any { it.pressed })
-                                    }
+                            .fillMaxSize(),
+                        factory = { ctx ->
+                            RecordButton(ctx).apply {
+                                text = when (language) {
+                                    "zh" -> "按住 说话"
+                                    "en" -> "Hold to Talk"
+                                    "dialect" -> "揿牢 讲闲话"
+                                    else -> "按住 说话"
                                 }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = when (language) {
-                                "zh" -> "按住 说话"
-                                "en" -> "Hold to Talk"
-                                "dialect" -> "揿牢 讲闲话"
-                                else -> "按住 说话"
-                            },
-                            color = Color.Black
-                        )
-                    }
+                                setLanguage(language)
+                                setOverlayDialogCallback { visible ->
+                                    showOverlay = visible
+                                }
+                                bindOverlayViewModel(overlay_viewModel)
+                                setOnFinishedRecordListener(object : OnFinishedRecordListener {
+                                    override fun onFinishedRecord(audioPath: String, time: Int) {
+                                        Toast.makeText(
+                                            ctx,
+                                            "录音完成: $audioPath ($time 秒)",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                })
+                            }
+                        }
+                    )
                 }
             }
         ) { paddingValues ->
@@ -170,7 +180,7 @@ fun ChatScreen(
             ) {
                 items(chatMessages.size) { index ->
                     val message = chatMessages[index]
-                    ChatVoiceItem(message = message, currentLanguage = language)
+                    NewChatVoiceItem(message = message)
                 }
             }
         }
@@ -178,23 +188,24 @@ fun ChatScreen(
 
     //解决首次登录时需要发送音频才能接收消息的问题（初始化就可以接收回调）
     LaunchedEffect(isReceive) {
-        Log.d("ChatScreen", "运行了")
-        overlay_viewModel.onVoiceMessageSent = { duration, content, isMe, audioUrl ->
-            Log.d("ChatScreen", "持续时间$duration,文本内容$content,音频地址: $audioUrl")
-            chatViewModel.addVoiceMessage( //用chatViewModel管理
-                ChatMessage.Voice(
-                    duration = duration,
-                    textContent = content,
-                    isMe = isMe,//后续需要根据后端返回数据做修改
-                    audioUrl = audioUrl
+        overlay_viewModel.onVoiceMessageSent =
+            { duration, content, isMe, fromLanguage, toLanguage, audioUrl ->
+                chatViewModel.addVoiceMessage( //用chatViewModel管理
+                    ChatMessage.Voice(
+                        duration = duration,
+                        textContent = content,
+                        isMe = isMe,//后续需要根据后端返回数据做修改
+                        fromLanguage=fromLanguage,
+                        toLanguage=toLanguage,
+                        audioUrl = audioUrl
+                    )
                 )
-            )
-        }
+            }
         overlay_viewModel.setReceiveState(false)
     }
 
     if (showOverlay) {
-        OverlayDialog(
+        NewOverlayDialog(
             language = language,
             viewModel = overlay_viewModel,
             onDismiss = { showOverlay = false },
@@ -203,7 +214,7 @@ fun ChatScreen(
 }
 
 @Composable
-fun ChatVoiceItem(message: ChatMessage.Voice, currentLanguage: String) {
+fun NewChatVoiceItem(message: ChatMessage.Voice) {
     var showText by remember { mutableStateOf(false) }
     val durationSeconds = message.duration.filter { it.isDigit() }.toIntOrNull() ?: 1
     val minWidth = 80.dp
@@ -238,7 +249,12 @@ fun ChatVoiceItem(message: ChatMessage.Voice, currentLanguage: String) {
             if (message.isMe) {
                 // 自己的名字显示在右侧气泡上方
                 Text(
-                    text = currentLanguage,
+                    text = when (message.fromLanguage) {
+                        "zh" -> "中文"
+                        "en" -> "英文"
+                        "dialect" -> "方言"
+                        else -> "张三"
+                    },
                     fontSize = 12.sp,
                     color = Color.Gray,
                     modifier = Modifier
@@ -247,7 +263,12 @@ fun ChatVoiceItem(message: ChatMessage.Voice, currentLanguage: String) {
                 )
             } else {
                 Text(
-                    text = currentLanguage,
+                    text = when (message.fromLanguage) {
+                        "zh" -> "中文"
+                        "en" -> "英文"
+                        "dialect" -> "方言"
+                        else -> "张三"
+                    },
                     fontSize = 12.sp,
                     color = Color.Gray,
                     modifier = Modifier
@@ -304,7 +325,7 @@ fun ChatVoiceItem(message: ChatMessage.Voice, currentLanguage: String) {
                             visibleText = ""
                             for (i in message.textContent.indices) {
                                 visibleText += message.textContent[i]
-                                kotlinx.coroutines.delay(30)
+                                delay(30)
                             }
                         }
                         Text(
@@ -342,15 +363,15 @@ fun ChatVoiceItem(message: ChatMessage.Voice, currentLanguage: String) {
 }
 
 @Composable
-fun OverlayDialog(
+fun NewOverlayDialog(
     language: String,
     onDismiss: () -> Unit,
     viewModel: OverlayViewModel,
 ) {
     val context = LocalContext.current
     val released by viewModel::released
-    var cancelZoneLoaction by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
-    var isInCancelZone by remember { mutableStateOf(false) }
+    var cancelZoneLoaction by remember { mutableStateOf<Rect?>(null) }
+    val isInCancelZone by viewModel::inCancelZone
     var currentTouchPosition by remember { mutableStateOf(Offset.Zero) }
 
     // 跳动动画
@@ -378,8 +399,8 @@ fun OverlayDialog(
                         change.consume()
                         currentTouchPosition = change.position
 
-                        isInCancelZone = cancelZoneLoaction?.contains(currentTouchPosition) == true
-                        viewModel.inCancelZone = isInCancelZone
+//                        isInCancelZone = cancelZoneLoaction?.contains(currentTouchPosition) == true
+//                        viewModel.inCancelZone = isInCancelZone
                     },
                     onDragEnd = {
                         if (isInCancelZone) {
@@ -405,7 +426,10 @@ fun OverlayDialog(
                 .fillMaxHeight(0.1f)
                 .align(Alignment.Center)
                 .offset(y = (20).dp)
-                .onGloballyPositioned { coords -> cancelZoneLoaction = coords.boundsInRoot() }
+                .onGloballyPositioned { coords ->
+                    cancelZoneLoaction = coords.boundsInRoot()
+                    viewModel.cancelZoneLocation = cancelZoneLoaction
+                }
                 .background(
                     if (isInCancelZone) Color(0xFFD32F2F) else Color.LightGray,
                     shape = CircleShape
@@ -459,53 +483,6 @@ fun OverlayDialog(
                 modifier = Modifier
                     .size(48.dp)
                     .offset(y = micOffset.dp)
-            )
-        }
-    }
-}
-
-@Composable
-fun ChatMessageItem(text: String, isMe: Boolean) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
-    ) {
-        if (!isMe) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .align(Alignment.Top)
-                    .clip(CircleShape)
-                    .background(Color.Gray)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-        }
-
-        Surface(
-            color = if (isMe) Color(0xFF9EEA6A) else Color.White,
-            shape = MaterialTheme.shapes.medium,
-            tonalElevation = 2.dp,//阴影纹理
-            modifier = Modifier.widthIn(max = 280.dp)
-        ) {
-            Text(
-                text = text,
-                modifier = Modifier.padding(12.dp),
-                fontSize = 14.sp,
-                color = Color.Black
-            )
-        }
-
-        if (isMe) {
-            Spacer(modifier = Modifier.width(4.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .align(Alignment.Top)
-                    .clip(CircleShape)
-                    .background(Color.Gray)
             )
         }
     }

@@ -5,6 +5,8 @@ sealed class ChatMessage {
         val duration: String,
         val textContent: String,
         val isMe: Boolean,
+        val fromLanguage: String,
+        val toLanguage: String,
         val audioUrl: String // 单个音频路径或 URL
     ) : ChatMessage() {
         fun getAudioPath(): String {

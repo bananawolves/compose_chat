@@ -18,7 +18,7 @@
     <!-- 显示录音转换的文字 -->
     <TextView
         android:id="@+id/recognizedText"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:padding="8dp"
         android:text="语音转文字显示区"

@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.emotionlink.AudioDemo.WebSocketStatusListener
@@ -32,9 +33,10 @@ class OverlayViewModel(
     private var audioSender: WebSocketAudioSender? = null
     var released by mutableStateOf(false)
     var inCancelZone by mutableStateOf(false)
+    var cancelZoneLocation: Rect? = null  //用于存放取消按钮位置
     private var startTime: Long = 0
     private var endTime: Long = 0
-    var onVoiceMessageSent: ((String, String, Boolean, String) -> Unit)? = null
+    var onVoiceMessageSent: ((String, String,Boolean, String,String, String) -> Unit)? = null
     val Tag = "OverlayViewModel"
 
     private var currentLanguage: String = "zh" // 设置默认语言
@@ -60,17 +62,11 @@ class OverlayViewModel(
                         wavUrl: String,
                         duration: String
                     ) {
-                        FromLanguage = fromLang
-                        TargetLanguage = toLang
-                        returnText = text
-                        returnUrl = wavUrl
-                        Log.d(Tag, "来自$FromLanguage,目标$TargetLanguage,音频地址: $returnUrl")
-
-                        val duration = "${(endTime - startTime) / 1000}\""
                         val isMe = fromLang == toLang
-                        val audioPathToUse = if (isMe) localWavFile.absolutePath else returnUrl
-
-                        onVoiceMessageSent?.invoke(duration, text, isMe, audioPathToUse)
+                        val finalDuration = if (isMe){"${(endTime - startTime) / 1000}\"" }else duration
+                        val audioPathToUse = if (isMe) localWavFile.absolutePath else wavUrl
+                        Log.d(Tag, "来自$fromLang,目标$toLang,音频地址: $audioPathToUse,持续时间$finalDuration")
+                        onVoiceMessageSent?.invoke(finalDuration, text, isMe, fromLang,toLang,audioPathToUse)
                         setReceiveState(true)
                     }
 
@@ -114,7 +110,7 @@ class OverlayViewModel(
     fun startRecording() {
         Log.d(Tag, "录音开始")
         startTime = System.currentTimeMillis()
-        audioSender = WebSocketAudioSender(context, wsClient)
+        audioSender = WebSocketAudioSender(context, wsClient,inCancelZone)
         audioSender?.setLanguage(currentLanguage)
 
         audioSender?.startStreaming()
@@ -122,6 +118,7 @@ class OverlayViewModel(
 
 
     private fun stopRecording() {
+        Log.d(Tag, "取消录音")
         try {
             // 停止 WebSocket 实时录音
             audioSender?.stopStreaming()

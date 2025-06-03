@@ -10,13 +10,17 @@ import android.util.Log
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import com.example.emotionlink.data.AudioConvert
+import kotlinx.coroutines.delay
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class WebSocketAudioSender(
     private val context: Context,
     private var wsClient: WebSocketUploader?,
+    private var inCancelZone: Boolean?,
     private var language: String = "zh"
 ) {
 
@@ -36,22 +40,9 @@ class WebSocketAudioSender(
 
     val Tag = "socketAudioSender"
 
-    fun setLanguage(newLang: String, onReady: (() -> Unit)? = null) {
+    fun setLanguage(newLang: String) {
         this.language = newLang
         Log.d(Tag, "语言已更新为 $language")
-//        WebsocketUploaderManager.seMessageCallback(callback)
-//        WebsocketUploaderManager.initUploader(language, object : WebSocketStatusListener {
-//            override fun onConnected() {
-//                Log.d(Tag, "WebSocket 准备就绪，开始录音")
-//                wsClient = WebsocketUploaderManager.getUploader()
-//                wsClient?.sendInit()
-//                onReady?.invoke()  // ✅ 调用回调，表示准备好了
-//            }
-//
-//            override fun onError(e: Exception) {
-//                Log.d(Tag, "WebSocket 连接失败：$e")
-//            }
-//        })
     }
 
 
@@ -66,7 +57,6 @@ class WebSocketAudioSender(
             Log.d(Tag, "wsClient为空")
         }
         wsClient?.sendInit()
-
         startAudioRecordingLoop()
     }
 
@@ -86,7 +76,7 @@ class WebSocketAudioSender(
                 sampleRate,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT
-            )
+            )*10
 
             audioRecord = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
@@ -101,7 +91,8 @@ class WebSocketAudioSender(
             isRecording = true
 
             while (isRecording && wsClient != null) {
-                val read = audioRecord!!.read(buffer, 0, buffer.size)
+                val read= audioRecord!!.read(buffer, 0, buffer.size)
+                Log.d(Tag,read.toString())
                 if (read > 0) {
                     wsClient?.sendAudioChunk(buffer, read)
                     synchronized(fileLock) {
@@ -117,9 +108,9 @@ class WebSocketAudioSender(
 //            while (isRecording) {
 //                val read = audioRecord!!.read(buffer, 0, buffer.size)
 //                if (read > 0) {
+//                    wsClient?.sendAudioChunk(buffer, read)
 //                    synchronized(fileLock) {
 //                        try {
-////                            Log.d(Tag, "卡住了")
 //                            outputStream.write(buffer, 0, read)
 //                        } catch (e: IOException) {
 //                            e.printStackTrace()
@@ -132,7 +123,8 @@ class WebSocketAudioSender(
             audioRecord = null
             val endTime = System.currentTimeMillis()
             val duration = "${(endTime - startTime) / 1000}\""
-            wsClient?.sendEnd(duration)
+
+            wsClient?.sendEnd(duration, inCancelZone == true)
         }.start()
     }
 
