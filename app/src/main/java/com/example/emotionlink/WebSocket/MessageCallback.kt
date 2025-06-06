@@ -1,4 +1,4 @@
-package com.example.emotionlink.Repository
+package com.example.emotionlink.WebSocket
 
 interface MessageCallback {
 

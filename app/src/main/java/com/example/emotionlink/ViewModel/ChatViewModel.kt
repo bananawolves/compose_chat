@@ -15,7 +15,6 @@ class ChatViewModel(
 
     companion object {
         private const val CHAT_ITEMS_KEY = "chat_voice_items"
-        private const val LANGUAGE_KEY = "chat_language"
     }
 
     private val gson = Gson()
@@ -28,11 +27,6 @@ class ChatViewModel(
     )
     val chatVoiceItems: StateFlow<List<ChatMessage.Voice>> = _chatVoiceItems.asStateFlow()
 
-    // 当前语言（持久化）
-    private val _currentLanguage = MutableStateFlow(
-        savedStateHandle[LANGUAGE_KEY] ?: "zh"
-    )
-    val currentLanguage: StateFlow<String> = _currentLanguage.asStateFlow()
 
     private val stateHandle = savedStateHandle
 
@@ -42,11 +36,6 @@ class ChatViewModel(
         saveToStateHandle(updated)
     }
 
-    // 设置语言
-    fun updateLanguage(lang: String) {
-        _currentLanguage.value = lang
-        stateHandle[LANGUAGE_KEY] = lang
-    }
 
     private fun saveToStateHandle(list: List<ChatMessage.Voice>) {
         val json = gson.toJson(list)

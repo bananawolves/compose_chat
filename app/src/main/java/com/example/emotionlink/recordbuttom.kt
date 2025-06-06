@@ -104,6 +104,8 @@ class RecordButton @JvmOverloads constructor(
                 text = "松开发送"
                 overlayViewModel?.resetReleased()
                 overlayCallback?.invoke(true) // 👈 显示 OverlayDialog
+                startTime = System.currentTimeMillis()
+                overlayViewModel?.inCancelZone = false // ✅ 这里重置状态
 //                initDialogAndStartRecord()
             }
             MotionEvent.ACTION_MOVE -> {
@@ -120,18 +122,26 @@ class RecordButton @JvmOverloads constructor(
             }
             MotionEvent.ACTION_UP -> {
                 text = when (language) {
-                    "zh" -> "按住 说话"
+                    "cn" -> "按住 说话"
                     "en" -> "Hold to Talk"
-                    "dialect" -> "揿牢 讲闲话"
+                    "sh" -> "揿牢 讲闲话"
                     else -> "按住 说话"
                 }
                 overlayCallback?.invoke(false)
                 startTimer.cancel()
                 recordTimer.cancel()
-                if (overlayViewModel?.inCancelZone == true) {
+                val duration = System.currentTimeMillis() - startTime
+                if (duration < MIN_INTERVAL_TIME) {
+                    overlayViewModel?.inCancelZone=true
                     overlayViewModel?.cancelRecording()
+                    Toast.makeText(context, "录音时间太短", Toast.LENGTH_SHORT).show()
                 } else {
-                    overlayViewModel?.triggerReleased()
+                    if (overlayViewModel?.inCancelZone == true) {
+                        overlayViewModel?.cancelRecording()
+                    } else {
+                        overlayViewModel?.triggerReleased()
+                        finishRecord() // 👈 满足条件时，结束录音
+                    }
                 }
             }
 

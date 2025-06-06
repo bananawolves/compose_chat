@@ -1,9 +1,6 @@
 package com.example.emotionlink.ViewModel
 
 import AudioPlayerManager
-import android.util.Log
-import android.view.Gravity
-import android.view.View.TEXT_ALIGNMENT_CENTER
 import android.widget.Toast
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -11,9 +8,9 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,10 +30,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -66,14 +62,18 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.emotionlink.R
 import com.example.emotionlink.RecordButton
 import com.example.emotionlink.RecordButton.OnFinishedRecordListener
 import com.example.emotionlink.data.ChatMessage
@@ -95,6 +95,7 @@ fun NewChatScreen(
         viewModel(factory = OverlayViewModelFactory(context, langue_viewModel))
     val isReceive by overlay_viewModel.isReceive.collectAsState()
     val chatMessages by chatViewModel.chatVoiceItems.collectAsState()
+    val listState = rememberLazyListState()
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -113,10 +114,10 @@ fun NewChatScreen(
                         ) {
                             Text(
                                 text = when (language) {
-                                    "zh" -> "情译同传"
+                                    "cn" -> "情译同传"
                                     "en" -> "EmotionLink"
-                                    "dialect" -> "情译（方言）"
-                                    else -> "情译同传"
+                                    "sh" -> "情译（方言）"
+                                    else -> "情译同传(请选择语言环境)"
                                 },
                                 fontSize = 18.sp,
                                 textAlign = TextAlign.Center
@@ -135,7 +136,6 @@ fun NewChatScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(WindowInsets.navigationBars.asPaddingValues()) //避开手机自带的底部导航栏遮挡
-
                         .height(80.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -145,9 +145,9 @@ fun NewChatScreen(
                         factory = { ctx ->
                             RecordButton(ctx).apply {
                                 text = when (language) {
-                                    "zh" -> "按住 说话"
+                                    "cn" -> "按住 说话"
                                     "en" -> "Hold to Talk"
-                                    "dialect" -> "揿牢 讲闲话"
+                                    "sh" -> "揿牢 讲闲话"
                                     else -> "按住 说话"
                                 }
                                 setLanguage(language)
@@ -155,15 +155,6 @@ fun NewChatScreen(
                                     showOverlay = visible
                                 }
                                 bindOverlayViewModel(overlay_viewModel)
-                                setOnFinishedRecordListener(object : OnFinishedRecordListener {
-                                    override fun onFinishedRecord(audioPath: String, time: Int) {
-                                        Toast.makeText(
-                                            ctx,
-                                            "录音完成: $audioPath ($time 秒)",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                })
                             }
                         }
                     )
@@ -171,6 +162,7 @@ fun NewChatScreen(
             }
         ) { paddingValues ->
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
@@ -185,7 +177,12 @@ fun NewChatScreen(
             }
         }
     }
-
+    //聚焦最新的消息，避免手动下滑去找新消息
+    LaunchedEffect(chatMessages.size) {
+        if (chatMessages.isNotEmpty()) {
+            listState.animateScrollToItem(chatMessages.size - 1)
+        }
+    }
     //解决首次登录时需要发送音频才能接收消息的问题（初始化就可以接收回调）
     LaunchedEffect(isReceive) {
         overlay_viewModel.onVoiceMessageSent =
@@ -194,9 +191,9 @@ fun NewChatScreen(
                     ChatMessage.Voice(
                         duration = duration,
                         textContent = content,
-                        isMe = isMe,//后续需要根据后端返回数据做修改
-                        fromLanguage=fromLanguage,
-                        toLanguage=toLanguage,
+                        isMe = isMe,
+                        fromLanguage = fromLanguage,
+                        toLanguage = toLanguage,
                         audioUrl = audioUrl
                     )
                 )
@@ -216,10 +213,11 @@ fun NewChatScreen(
 @Composable
 fun NewChatVoiceItem(message: ChatMessage.Voice) {
     var showText by remember { mutableStateOf(false) }
-    val durationSeconds = message.duration.filter { it.isDigit() }.toIntOrNull() ?: 1
+    val durationSeconds = message.duration.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 60) ?: 1
     val minWidth = 80.dp
-    val maxWidth = 220.dp
-    val bubbleWidth = minWidth + (maxWidth - minWidth) * (durationSeconds.coerceAtMost(60) / 60f)
+    val maxWidth = 240.dp
+    val bubbleWidth = minWidth + (maxWidth - minWidth) * (durationSeconds / 60f)
+
     val context = LocalContext.current
     var isPlaying by remember { mutableStateOf(false) }
     val audioPath = message.getAudioPath()
@@ -233,13 +231,15 @@ fun NewChatVoiceItem(message: ChatMessage.Voice) {
             .padding(horizontal = 8.dp, vertical = 4.dp),
         horizontalArrangement = if (message.isMe) Arrangement.End else Arrangement.Start
     ) {
+        //其他人的头像
         if (!message.isMe) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(
+                Image(
+                    painter = painterResource(id = R.drawable.avatar), // 本地头像资源
+                    contentDescription = "User Avatar",
+                    contentScale = ContentScale.Crop, // 图片裁剪填满容器
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color.Gray)
+                        .size(36.dp) // 方形大小
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
@@ -250,9 +250,9 @@ fun NewChatVoiceItem(message: ChatMessage.Voice) {
                 // 自己的名字显示在右侧气泡上方
                 Text(
                     text = when (message.fromLanguage) {
-                        "zh" -> "中文"
+                        "cn" -> "中文"
                         "en" -> "英文"
-                        "dialect" -> "方言"
+                        "sh" -> "方言"
                         else -> "张三"
                     },
                     fontSize = 12.sp,
@@ -264,9 +264,9 @@ fun NewChatVoiceItem(message: ChatMessage.Voice) {
             } else {
                 Text(
                     text = when (message.fromLanguage) {
-                        "zh" -> "中文"
+                        "cn" -> "中文"
                         "en" -> "英文"
-                        "dialect" -> "方言"
+                        "sh" -> "方言"
                         else -> "张三"
                     },
                     fontSize = 12.sp,
@@ -276,16 +276,18 @@ fun NewChatVoiceItem(message: ChatMessage.Voice) {
                         .align(Alignment.Start)
                 )
             }
+            //语言消息区
             Surface(
                 color = if (message.isMe) Color(0xFF9EEA6A) else Color.White,
                 shape = MaterialTheme.shapes.medium,
                 tonalElevation = 2.dp,
-                modifier = Modifier.width(bubbleWidth)
+                modifier = Modifier.wrapContentWidth()
             ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable {
+                Column(
+                    modifier = Modifier
+                        .width(bubbleWidth)
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .clickable {
                             if (!AudioPlayerManager.isPlaying(audioPath)) {
                                 AudioPlayerManager.play(
                                     context = context,
@@ -297,64 +299,70 @@ fun NewChatVoiceItem(message: ChatMessage.Voice) {
                                 AudioPlayerManager.stop()
                                 isPlaying = false
                             }
-
-                        }) {
-                        if (message.isMe) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "语音播放",
-                                tint = Color.Black
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(message.duration, fontSize = 14.sp, color = Color.Black)
-
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "语音播放",
-                                tint = Color.Black
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(message.duration, fontSize = 14.sp, color = Color.Black)
                         }
-                    }
-                    if (showText) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        var visibleText by remember { mutableStateOf("") }
-                        LaunchedEffect(message.textContent) {
-                            visibleText = ""
-                            for (i in message.textContent.indices) {
-                                visibleText += message.textContent[i]
-                                delay(30)
-                            }
-                        }
-                        Text(
-                            text = visibleText,
-                            fontSize = 13.sp,
-                            color = Color.DarkGray
+                ) {
+                    //语言消息图标
+                    Row(verticalAlignment = Alignment.CenterVertically)
+                    {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "语音播放",
+                            tint = Color.Black
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(message.duration, fontSize = 14.sp, color = Color.Black)
+
                     }
                 }
             }
+            if (showText) {
+                Spacer(modifier = Modifier.height(6.dp))
+                var visibleText by remember { mutableStateOf("") }
+                LaunchedEffect(message.textContent) {
+                    visibleText = ""
+                    for (i in message.textContent.indices) {
+                        visibleText += message.textContent[i]
+                        delay(30)
+                    }
+                }
+                Surface(
+                    color = Color.White,
+                    shape = MaterialTheme.shapes.medium,
+                    tonalElevation = 2.dp,
+                    modifier = Modifier.width(250.dp)
+                ) {
+                    Text(
+                        text = visibleText,
+                        fontSize = 13.sp,
+                        color = Color.DarkGray,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+            }
+            //语言转文字显示区
             TextButton(
                 onClick = { showText = !showText },
                 modifier = Modifier.defaultMinSize(minHeight = 16.dp)
             ) {
                 Text(
-                    if (showText) "收起" else "转文字",
+                    //如果是自己的话就不显示文字
+                    if (!message.isMe)
+                        if (showText) "收起" else "转文字" else "",
                     fontSize = 12.sp,
                     color = Color.Gray
                 )
             }
         }
+        //右侧头像
         if (message.isMe) {
             Spacer(modifier = Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(
+                Image(
+                    painter = painterResource(id = R.drawable.avatar), // 本地头像资源
+                    contentDescription = "User Avatar",
+                    contentScale = ContentScale.Crop, // 图片裁剪填满容器
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color.Gray)
+                        .size(36.dp) // 方形大小
                 )
             }
         }
@@ -368,11 +376,8 @@ fun NewOverlayDialog(
     onDismiss: () -> Unit,
     viewModel: OverlayViewModel,
 ) {
-    val context = LocalContext.current
-    val released by viewModel::released
     var cancelZoneLoaction by remember { mutableStateOf<Rect?>(null) }
     val isInCancelZone by viewModel::inCancelZone
-    var currentTouchPosition by remember { mutableStateOf(Offset.Zero) }
 
     // 跳动动画
     val infiniteTransition = rememberInfiniteTransition(label = "mic_jump")
@@ -389,33 +394,7 @@ fun NewOverlayDialog(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.3f))
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        currentTouchPosition = offset
-                    },
-                    onDrag = { change, _ ->
-                        change.consume()
-                        currentTouchPosition = change.position
-
-//                        isInCancelZone = cancelZoneLoaction?.contains(currentTouchPosition) == true
-//                        viewModel.inCancelZone = isInCancelZone
-                    },
-                    onDragEnd = {
-                        if (isInCancelZone) {
-                            viewModel.cancelRecording()
-                            onDismiss()
-                        } else {
-                            viewModel.triggerReleased()
-                            onDismiss()
-                        }
-                    },
-                    onDragCancel = {
-                        viewModel.triggerReleased() // 或者 cancelRecording，看你希望默认行为是什么
-                    }
-                )
-            },
+            .background(Color.Black.copy(alpha = 0.3f)),
         contentAlignment = Alignment.Center
     ) {
         // 取消按钮
@@ -440,21 +419,21 @@ fun NewOverlayDialog(
         ) {
             Text(
                 text = when (language) {
-                    "zh" -> "取消"
+                    "cn" -> "取消"
                     "en" -> "Cancel"
-                    "dialect" -> "取消"
+                    "sh" -> "取消"
                     else -> "取消"
                 },
                 color = if (isInCancelZone) Color.Black else Color.White, fontSize = 23.sp
             )
         }
 
-        // 松开发送文字
+        // 录音提示区
         Text(
             text = when (language) {
-                "zh" -> "松开发送文字"
+                "cn" -> "松开发送文字"
                 "en" -> "Release to Send"
-                "dialect" -> "放手发送"
+                "sh" -> "放手发送"
                 else -> "松开发送文字"
             },
             color = Color.White,

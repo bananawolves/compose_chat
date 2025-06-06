@@ -61,7 +61,7 @@ fun SettingsScreen(
         ) {
             Text("选择语音环境", fontSize = 20.sp)
 
-            Button(onClick = { onLanguageChosen("zh") }) {
+            Button(onClick = { onLanguageChosen("cn") }) {
                 Text("中文")
             }
 
@@ -69,10 +69,13 @@ fun SettingsScreen(
                 Text("英文")
             }
 
-            Button(onClick = { onLanguageChosen("dialect") }) {
+            Button(onClick = { onLanguageChosen("sh") }) {
                 Text("方言")
             }
 
+            Button(onClick = { onLanguageChosen("11") }) {
+                Text("重启服务中转")
+            }
             Spacer(modifier = Modifier.height(24.dp))
 
             Text("头像设置", fontSize = 20.sp)

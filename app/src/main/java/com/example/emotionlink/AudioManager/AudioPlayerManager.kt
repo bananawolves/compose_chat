@@ -1,7 +1,9 @@
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
-
+/*
+放回url时的播放方式
+ */
 object AudioPlayerManager {
     private var mediaPlayer: MediaPlayer? = null
     var currentPath: String? = null
@@ -28,10 +30,11 @@ object AudioPlayerManager {
                         .build()
                 )
                 setDataSource(path)
-                prepare()
-                start()
-                currentPath = path
-                onStarted()
+                setOnPreparedListener {
+                    it.start()
+                    currentPath = path
+                    onStarted()
+                }
                 setOnCompletionListener {
                     stop()
                     onStopped()
@@ -41,6 +44,7 @@ object AudioPlayerManager {
                     onStopped()
                     true
                 }
+                prepareAsync()//异步播放，防止主线程阻塞出现anr问题
             }
         } catch (e: Exception) {
             e.printStackTrace()

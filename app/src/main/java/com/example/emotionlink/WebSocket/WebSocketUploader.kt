@@ -1,7 +1,12 @@
 package com.example.emotionlink.Repository
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.widget.Toast
 import com.example.emotionlink.AudioDemo.WebSocketStatusListener
+import com.example.emotionlink.MyApplication
+import com.example.emotionlink.WebSocket.MessageCallback
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,6 +32,7 @@ class WebSocketUploader(
         private const val TAG = "WebSocketUploader"
     }
 
+    private var context = MyApplication.context
     private var isReconnecting = false
     private var webSocket: WebSocket? = null
     private var statusListener: WebSocketStatusListener? = null
@@ -46,7 +52,7 @@ class WebSocketUploader(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d(TAG, "WebSocket connected")
                 statusListener?.onConnected()
-                startHeartbeat()
+//                startHeartbeat()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -67,6 +73,7 @@ class WebSocketUploader(
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "WebSocket closing: $reason")
+
                 webSocket.close(code, reason)
             }
 
@@ -126,7 +133,7 @@ class WebSocketUploader(
                 put("msg_type", "chunk_info")
                 put("chunk_id", chunkId)
                 put("status", "start")
-                put("chunk_size", length/2)//1280
+                put("chunk_size", length / 2)//1280
             }
             webSocket?.send(meta.toString())
 
@@ -139,17 +146,18 @@ class WebSocketUploader(
         }
     }
 
-    fun sendEnd(duration: String,inCancelZone: Boolean) {
+    fun sendEnd(duration: String, inCancelZone: Boolean) {
         try {
-            val status = if (inCancelZone) "discard" else "end"
+            val status = if (inCancelZone) "discard" else "end"//后面再修改
             val end = JSONObject().apply {
                 put("msg_type", "chunk_info")
                 put("chunk_id", "-1")
-                put("status", status)
+                put("status", "end")
                 put("chunk_size", 0)
                 put("duration", duration)
             }
             Log.d(TAG, "发送结束")
+            chunkId = 0
             webSocket?.send(end.toString())
         } catch (e: Exception) {
             e.printStackTrace()
