@@ -3,6 +3,7 @@ package com.example.emotionlink
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
+import leakcanary.LeakCanary
 
 
 class MyApplication : Application() {
@@ -15,6 +16,10 @@ class MyApplication : Application() {
     }
     override fun onCreate() {
         super.onCreate()
+        //设置阈值只要有一处内存泄漏直接排查
+        LeakCanary.config = LeakCanary.config.copy(retainedVisibleThreshold = 1)
+
         context=applicationContext
     }
 }
+

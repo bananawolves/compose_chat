@@ -1,6 +1,6 @@
-import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+
 /*
 放回url时的播放方式
  */
@@ -10,7 +10,6 @@ object AudioPlayerManager {
     private var onCompletion: (() -> Unit)? = null
 
     fun play(
-        context: Context,
         path: String,
         onStarted: () -> Unit,
         onStopped: () -> Unit

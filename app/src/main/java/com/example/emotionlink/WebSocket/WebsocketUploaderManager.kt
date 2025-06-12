@@ -2,8 +2,8 @@ package com.example.emotionlink.WebSocket
 
 import android.content.Context
 import android.util.Log
-import com.example.emotionlink.AudioDemo.WebSocketStatusListener
 import com.example.emotionlink.Repository.WebSocketUploader
+import com.example.emotionlink.Utils.LogUtils
 
 object WebsocketUploaderManager {
     private var uploader: WebSocketUploader? = null
@@ -33,7 +33,7 @@ object WebsocketUploaderManager {
             "sh" -> "Djehfea5ErSfC6ZrbHSfxH"
             else -> ""
         }
-        Log.d("WebsocketUploaderManager",userId)
+        LogUtils.d("WebsocketUploaderManager",userId)
         return "ws://117.160.123.34:43073/waic/apitest/start_chat/?group_id=$groupId&user_id=$userId"
     }
 }

@@ -1,9 +1,7 @@
 package com.example.emotionlink.ViewModel
 
-import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -11,12 +9,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.emotionlink.AudioDemo.WebSocketStatusListener
-import com.example.emotionlink.AudioManager.AudioConvert
+import com.example.emotionlink.MyApplication.Companion.context
 import com.example.emotionlink.Repository.WebSocketUploader
+import com.example.emotionlink.Utils.LogUtils
 import com.example.emotionlink.WebSocket.MessageCallback
 import com.example.emotionlink.WebSocket.WebSocketAudioSender
-//import com.example.emotionlink.WebSocket.WebSocketStatusListener
+import com.example.emotionlink.WebSocket.WebSocketStatusListener
 import com.example.emotionlink.WebSocket.WebsocketUploaderManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,9 +23,10 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 class OverlayViewModel(
-    private val context: Context,
     private val languageViewModel: LanguageViewModel
 ) : ViewModel() {
+    private val Tag = "OverlayViewModel"
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var _isReceive = MutableStateFlow(false) // 默认中文
     var isReceive: StateFlow<Boolean> = _isReceive
     fun setReceiveState(whether: Boolean) {
@@ -42,18 +41,16 @@ class OverlayViewModel(
     private var endTime: Long = 0
     private var firstDuration: String = ""
     var onVoiceMessageSent: ((String, String, Boolean, String, String, String) -> Unit)? = null
-    val Tag = "OverlayViewModel"
 
     private var currentLanguage: String = "11" // 设置默认语言
 
     private lateinit var localWavFile: File
-    private var transformPcm: ByteArray? = null
     private var wsClient: WebSocketUploader? = null
-    var cancel: Boolean=false
+
     init {
         viewModelScope.launch {
             languageViewModel.language.collectLatest { lang ->
-                Log.d(Tag, "语言发生变化: $lang")
+                LogUtils.d(Tag, "语言发生变化: $lang")
                 currentLanguage = lang // 缓存语言
                 if (currentLanguage in listOf("cn", "sh", "en")) {
                     WebsocketUploaderManager.seMessageCallback(object : MessageCallback {
@@ -65,20 +62,26 @@ class OverlayViewModel(
                             duration: String
                         ) {
                             val isMe = fromLang == toLang
-//                        val finalDuration = if (isMe) firstDuration else "$duration\""
-                            val audioPathToUse = if (isMe) localWavFile.absolutePath else wavUrl
-                            Log.d(Tag, "来自$fromLang,目标$toLang,音频地址: $audioPathToUse,持续时间$duration\"")
-
+                            LogUtils.d(
+                                Tag,
+                                "来自$fromLang,目标$toLang,文字$text,是否相等${text == wavUrl},"
+                                        + "音频地址: $wavUrl,持续时间$duration\""
+                            )
                             if (!isMe) {
-                                onVoiceMessageSent?.invoke(
-                                    "$duration\"", text, isMe, fromLang, toLang, audioPathToUse
-                                )
+                                if (text != wavUrl) {
+                                    onVoiceMessageSent?.invoke(
+                                        "$duration\"",
+                                        text, isMe, fromLang, toLang, wavUrl
+                                    )
+                                } else {
+                                    showToast("检测到网络波动,请重试")
+                                }
                             }
                             setReceiveState(true)
                         }
 
                         override fun onError(e: Exception) {
-                            Log.e(Tag, "WebSocket 错误: ${e.message}")
+                            LogUtils.e(Tag, "WebSocket 错误: ${e.message}")
                         }
                     })
 
@@ -86,16 +89,14 @@ class OverlayViewModel(
                         lang,
                         object : WebSocketStatusListener {
                             override fun onConnected() {
-                                Log.d(Tag, "WebSocket 已连接（语言：$lang）")
+                                LogUtils.d(Tag, "WebSocket 已连接（语言：$lang）")
                                 wsClient = WebsocketUploaderManager.getUploader()
                                 wsClient?.sendInit()
                             }
 
                             override fun onError(e: Exception) {
-                                Handler(Looper.getMainLooper()).post {
-                                    Toast.makeText(context, "WebSocket 断开连接", Toast.LENGTH_SHORT).show()
-                                }
-                                Log.e(Tag, "WebSocket 初始化失败: $e")
+                                showToast("WebSocket 断开连接")
+                                LogUtils.e(Tag, "WebSocket 初始化失败: $e")
                             }
                         })
 
@@ -103,11 +104,6 @@ class OverlayViewModel(
                 }
             }
         }
-    }
-
-    fun triggerReleased() {
-        stopRecording()
-        released = true
     }
 
     fun resetReleased() {
@@ -121,17 +117,20 @@ class OverlayViewModel(
     }
 
     fun startRecording() {
-        Log.d(Tag, "录音开始")
         startTime = System.currentTimeMillis()
-        audioSender = WebSocketAudioSender(context, wsClient, inCancelZone,cancel)
+        audioSender = WebSocketAudioSender(wsClient)
         audioSender?.setLanguage(currentLanguage)
-
         audioSender?.startStreaming()
     }
 
+    override fun onCleared() {
+        super.onCleared()
+        // 在 ViewModel 销毁时只清理 WebSocket 连接
+        wsClient = null
+        mainHandler.removeCallbacksAndMessages(null)
+    }
 
     private fun stopRecording() {
-        Log.d(Tag, "取消录音")
         try {
             // 停止 WebSocket 实时录音
             audioSender?.stopStreaming()
@@ -140,17 +139,6 @@ class OverlayViewModel(
 
             audioSender?.let { sender ->
                 localWavFile = sender.audioWavFile
-                val baseName = localWavFile.nameWithoutExtension
-                val pcmFileName = "${baseName}_transform.pcm"
-                val walFileName = "${baseName}_transform.wav"
-                val transformPcmFile = File(localWavFile.parentFile, pcmFileName)
-                val transformWavFile = File(localWavFile.parentFile, walFileName)
-                if (transformPcm != null) {
-                    transformPcmFile.outputStream().use {
-                        it.write(transformPcm)
-                    }
-                    AudioConvert.convertPcmToWav(transformPcmFile, transformWavFile)
-                }
             }
             //本地录言优先显示
             if (!inCancelZone) {
@@ -159,10 +147,27 @@ class OverlayViewModel(
                     true, currentLanguage, currentLanguage, localWavFile.absolutePath
                 )
             }
-            Log.d(Tag,"!!!!!!!是否取消区域$inCancelZone.toString()")
 
+            // 设置录音完成回调，不在audiosender发送的原因是未来获取inCancelZone状态，不让后端处理本该取消的音频
+            audioSender?.setOnRecordingFinishedListener {
+                LogUtils.d(Tag, "!!!!!!!是否取消区域$inCancelZone")
+                if (!inCancelZone) {
+                    LogUtils.d(Tag, "!!!!!!!发送结束消息")
+                    wsClient?.sendEnd(firstDuration)
+                }
+                setReceiveState(true)
+                // 只清理录音相关资源，保持 WebSocket 连接
+                audioSender?.clearListener()
+                audioSender = null
+            }
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    private fun showToast(message: String) {
+        mainHandler.post {
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 }

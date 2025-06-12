@@ -1,12 +1,8 @@
 package com.example.emotionlink.Repository
 
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
-import android.widget.Toast
-import com.example.emotionlink.AudioDemo.WebSocketStatusListener
-import com.example.emotionlink.MyApplication
+import com.example.emotionlink.Utils.LogUtils
 import com.example.emotionlink.WebSocket.MessageCallback
+import com.example.emotionlink.WebSocket.WebSocketStatusListener
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,7 +17,6 @@ import okhttp3.WebSocketListener
 import okio.ByteString
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
-import kotlin.concurrent.thread
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 class WebSocketUploader(
@@ -31,8 +26,6 @@ class WebSocketUploader(
     companion object {
         private const val TAG = "WebSocketUploader"
     }
-
-    private var context = MyApplication.context
     private var isReconnecting = false
     private var webSocket: WebSocket? = null
     private var statusListener: WebSocketStatusListener? = null
@@ -50,35 +43,35 @@ class WebSocketUploader(
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.d(TAG, "WebSocket connected")
+                LogUtils.d(TAG, "WebSocket connected")
                 statusListener?.onConnected()
 //                startHeartbeat()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d(TAG, "Received: $text")
+                LogUtils.d(TAG, "Received: $text")
                 handleWebSocketMessage(text, messageCallback)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
 
-                Log.d(TAG, "Received binary message: ${bytes.hex()}")
+                LogUtils.d(TAG, "Received binary message: ${bytes.hex()}")
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "WebSocket error: ${t.message}")
+                LogUtils.e(TAG, "WebSocket error: ${t.message}")
                 statusListener?.onError(Exception(t))
                 reconnect()
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "WebSocket closing: $reason")
+                LogUtils.d(TAG, "WebSocket closing: $reason")
 
                 webSocket.close(code, reason)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "WebSocket closed: $reason")
+                LogUtils.d(TAG, "WebSocket closed: $reason")
             }
         })
     }
@@ -87,7 +80,7 @@ class WebSocketUploader(
         heartbeatJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
                 delay(10_000)
-                Log.d(TAG, "发送ping")
+                LogUtils.d(TAG, "发送ping")
                 send("ping")
             }
         }
@@ -100,9 +93,9 @@ class WebSocketUploader(
     private fun reconnect() {
         if (isReconnecting) return
         isReconnecting = true
-        CoroutineScope(Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {//有内存泄漏风险
             delay(5_000)
-            Log.d(TAG, "尝试重连")
+            LogUtils.d(TAG, "尝试重连")
             webSocket = null
             connect()
             isReconnecting = false
@@ -139,16 +132,15 @@ class WebSocketUploader(
 
             val chunk = audio.copyOfRange(0, length)
             webSocket?.send(ByteString.of(*chunk))
-            Log.d(TAG, "正在发送")
+            LogUtils.d(TAG, "正在发送")
             chunkId++
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    fun sendEnd(duration: String, inCancelZone: Boolean) {
+    fun sendEnd(duration: String) {
         try {
-            val status = if (inCancelZone) "discard" else "end"//后面再修改
             val end = JSONObject().apply {
                 put("msg_type", "chunk_info")
                 put("chunk_id", "-1")
@@ -156,7 +148,7 @@ class WebSocketUploader(
                 put("chunk_size", 0)
                 put("duration", duration)
             }
-            Log.d(TAG, "发送结束")
+            LogUtils.d(TAG, "发送结束")
             chunkId = 0
             webSocket?.send(end.toString())
         } catch (e: Exception) {
@@ -182,7 +174,7 @@ class WebSocketUploader(
                 val wavFile = data.optString("wav_file")
                 val duration = data.optString("duration")
 
-                if (!text.isNullOrEmpty() || !wavFile.isNullOrEmpty()) {
+                if (wavFile != null && wavFile.isNotEmpty()) {
                     callback.onTextMessageReceived(fromLang, toLang, text, wavFile, duration)
                 }
             }

@@ -27,7 +27,13 @@ class ChatViewModel(
     )
     val chatVoiceItems: StateFlow<List<ChatMessage.Voice>> = _chatVoiceItems.asStateFlow()
 
+    // 新增：记录当前播放的语音消息 ID
+    private val _currentPlayingId = MutableStateFlow<String?>(null)
+    val currentPlayingId: StateFlow<String?> = _currentPlayingId.asStateFlow()
 
+    fun setPlayingId(id: String?) {
+        _currentPlayingId.value = id
+    }
     private val stateHandle = savedStateHandle
 
     fun addVoiceMessage(message: ChatMessage.Voice) {

@@ -1,17 +1,19 @@
 package com.example.emotionlink.ViewModel
 
 import AudioPlayerManager
-import android.widget.Toast
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,25 +59,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.emotionlink.R
 import com.example.emotionlink.RecordButton
-import com.example.emotionlink.RecordButton.OnFinishedRecordListener
 import com.example.emotionlink.data.ChatMessage
 import kotlinx.coroutines.delay
 
@@ -90,11 +90,11 @@ fun NewChatScreen(
     val backgroundColor = Color(0xFFF5F5F5)
     val language by langue_viewModel.language.collectAsState()
     var showOverlay by remember { mutableStateOf(false) }
-    val context = LocalContext.current
     val overlay_viewModel: OverlayViewModel =
-        viewModel(factory = OverlayViewModelFactory(context, langue_viewModel))
+        viewModel(factory = OverlayViewModelFactory(langue_viewModel))
     val isReceive by overlay_viewModel.isReceive.collectAsState()
     val chatMessages by chatViewModel.chatVoiceItems.collectAsState()
+    val currentPlayingId by chatViewModel.currentPlayingId.collectAsState()
     val listState = rememberLazyListState()
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -172,7 +172,16 @@ fun NewChatScreen(
             ) {
                 items(chatMessages.size) { index ->
                     val message = chatMessages[index]
-                    NewChatVoiceItem(message = message)
+                    NewChatVoiceItem(
+                        message = message,
+                        currentPlayingId = currentPlayingId,
+                        onPlay = { id ->
+                            chatViewModel.setPlayingId(id)
+                        },
+                        onStop = {
+                            chatViewModel.setPlayingId(null)
+                        }
+                    )
                 }
             }
         }
@@ -210,24 +219,52 @@ fun NewChatScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun NewChatVoiceItem(message: ChatMessage.Voice) {
+fun NewChatVoiceItem(
+    message: ChatMessage.Voice,
+    currentPlayingId: String?,
+    onPlay: (String) -> Unit,
+    onStop: () -> Unit
+) {
     var showText by remember { mutableStateOf(false) }
-    val durationSeconds = message.duration.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 60) ?: 1
+    val durationSeconds =
+        message.duration.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 60) ?: 1
     val minWidth = 80.dp
     val maxWidth = 240.dp
     val bubbleWidth = minWidth + (maxWidth - minWidth) * (durationSeconds / 60f)
+    val isPlaying = message.id == currentPlayingId
+    // 添加旋转动画效果
+    val rotation by animateFloatAsState(
+        targetValue = if (isPlaying) 360f else 0f,
+        animationSpec = if (isPlaying) {
+            infiniteRepeatable(
+                animation = tween(1000),
+                repeatMode = RepeatMode.Restart
+            )
+        } else {
+            tween(0)
+        }
+    )
 
-    val context = LocalContext.current
-    var isPlaying by remember { mutableStateOf(false) }
     val audioPath = message.getAudioPath()
-//    val avatarUri = UserProfileManager.avatarUri
+    var isLocalPlaying by remember { mutableStateOf(false) }
+
     LaunchedEffect(audioPath) {
-        isPlaying = AudioPlayerManager.isPlaying(audioPath)
+        isLocalPlaying = AudioPlayerManager.isPlaying(audioPath)
+    }
+    val alpha = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        alpha.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 300)
+        )
     }
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .alpha(alpha.value)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         horizontalArrangement = if (message.isMe) Arrangement.End else Arrangement.Start
     ) {
@@ -238,8 +275,7 @@ fun NewChatVoiceItem(message: ChatMessage.Voice) {
                     painter = painterResource(id = R.drawable.avatar), // 本地头像资源
                     contentDescription = "User Avatar",
                     contentScale = ContentScale.Crop, // 图片裁剪填满容器
-                    modifier = Modifier
-                        .size(36.dp) // 方形大小
+                    modifier = Modifier.size(36.dp) // 方形大小
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
@@ -287,18 +323,27 @@ fun NewChatVoiceItem(message: ChatMessage.Voice) {
                     modifier = Modifier
                         .width(bubbleWidth)
                         .padding(horizontal = 12.dp, vertical = 10.dp)
-                        .clickable {
-                            if (!AudioPlayerManager.isPlaying(audioPath)) {
-                                AudioPlayerManager.play(
-                                    context = context,
-                                    path = audioPath,
-                                    onStarted = { isPlaying = true },
-                                    onStopped = { isPlaying = false }
-                                )
-                            } else {
-                                AudioPlayerManager.stop()
-                                isPlaying = false
-                            }
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onTap = {
+                                    if (!AudioPlayerManager.isPlaying(audioPath)) {
+                                        onPlay(message.id)
+                                        AudioPlayerManager.play(
+                                            path = audioPath,
+                                            onStarted = { },
+                                            onStopped = { onStop() }
+                                        )
+                                    } else {
+                                        onStop()
+                                        AudioPlayerManager.stop()
+                                    }
+                                },
+                                onLongPress = {
+                                    if (!message.isMe) {
+                                        showText = !showText
+                                    }
+                                }
+                            )
                         }
                 ) {
                     //语言消息图标
@@ -307,11 +352,15 @@ fun NewChatVoiceItem(message: ChatMessage.Voice) {
                         Icon(
                             imageVector = Icons.Default.PlayArrow,
                             contentDescription = "语音播放",
-                            tint = Color.Black
+                            tint = Color.Black,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .graphicsLayer {
+                                    rotationZ = rotation
+                                }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(message.duration, fontSize = 14.sp, color = Color.Black)
-
                     }
                 }
             }
@@ -340,19 +389,20 @@ fun NewChatVoiceItem(message: ChatMessage.Voice) {
                 }
             }
             //语言转文字显示区
-            TextButton(
-                onClick = { showText = !showText },
-                modifier = Modifier.defaultMinSize(minHeight = 16.dp)
-            ) {
-                Text(
-                    //如果是自己的话就不显示文字
-                    if (!message.isMe)
-                        if (showText) "收起" else "转文字" else "",
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
+            if (showText) {
+                TextButton(
+                    onClick = { showText = false },
+                    modifier = Modifier.defaultMinSize(minHeight = 16.dp)
+                ) {
+                    Text(
+                        "收起",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                }
             }
         }
+
         //右侧头像
         if (message.isMe) {
             Spacer(modifier = Modifier.width(8.dp))
@@ -360,13 +410,11 @@ fun NewChatVoiceItem(message: ChatMessage.Voice) {
                 Image(
                     painter = painterResource(id = R.drawable.avatar), // 本地头像资源
                     contentDescription = "User Avatar",
-                    contentScale = ContentScale.Crop, // 图片裁剪填满容器
-                    modifier = Modifier
-                        .size(36.dp) // 方形大小
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(36.dp)
                 )
             }
         }
-
     }
 }
 
