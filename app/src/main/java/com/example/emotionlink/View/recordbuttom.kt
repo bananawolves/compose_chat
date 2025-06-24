@@ -1,4 +1,4 @@
-package com.example.emotionlink
+package com.example.emotionlink.View
 
 import android.annotation.SuppressLint
 import android.content.Context

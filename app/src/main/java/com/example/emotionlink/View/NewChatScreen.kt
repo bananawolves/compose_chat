@@ -1,6 +1,10 @@
-package com.example.emotionlink.ViewModel
+package com.example.emotionlink.View
 
 import AudioPlayerManager
+import android.annotation.SuppressLint
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -38,9 +42,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -75,17 +81,24 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.emotionlink.R
-import com.example.emotionlink.RecordButton
+import com.example.emotionlink.ViewModel.ChatViewModel
+import com.example.emotionlink.ViewModel.LanguageViewModel
+import com.example.emotionlink.ViewModel.OverlayViewModel
+import com.example.emotionlink.ViewModel.OverlayViewModelFactory
+import com.example.emotionlink.ViewModel.VoiceCallViewModel
 import com.example.emotionlink.data.ChatMessage
 import kotlinx.coroutines.delay
 
+@SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewChatScreen(
     langue_viewModel: LanguageViewModel,
+    voiceCallViewModel: VoiceCallViewModel,
     onLanguageSelected: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
-    chatViewModel: ChatViewModel = viewModel()
+    onNavigateToCall: () -> Unit,
+    chatViewModel: ChatViewModel = viewModel(),
 ) {
     val backgroundColor = Color(0xFFF5F5F5)
     val language by langue_viewModel.language.collectAsState()
@@ -96,7 +109,8 @@ fun NewChatScreen(
     val chatMessages by chatViewModel.chatVoiceItems.collectAsState()
     val currentPlayingId by chatViewModel.currentPlayingId.collectAsState()
     val listState = rememberLazyListState()
-
+    var showDialog by remember { mutableStateOf(false) }
+    voiceCallViewModel.bindOverlayViewModel(overlay_viewModel)
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
@@ -132,32 +146,56 @@ fun NewChatScreen(
                 )
             },
             bottomBar = {
-                Box(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(WindowInsets.navigationBars.asPaddingValues()) //避开手机自带的底部导航栏遮挡
+                        .padding(WindowInsets.navigationBars.asPaddingValues())
                         .height(80.dp),
-                    contentAlignment = Alignment.Center
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    AndroidView(
+                    // 录音按钮占据剩余空间
+                    Box(
                         modifier = Modifier
-                            .fillMaxSize(),
-                        factory = { ctx ->
-                            RecordButton(ctx).apply {
-                                text = when (language) {
-                                    "cn" -> "按住 说话"
-                                    "en" -> "Hold to Talk"
-                                    "sh" -> "揿牢 讲闲话"
-                                    else -> "按住 说话"
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { ctx ->
+                                RecordButton(ctx).apply {
+                                    text = when (language) {
+                                        "cn" -> "按住 说话"
+                                        "en" -> "Hold to Talk"
+                                        "sh" -> "揿牢 讲闲话"
+                                        else -> "按住 说话"
+                                    }
+                                    setLanguage(language)
+                                    setOverlayDialogCallback { visible ->
+                                        showOverlay = visible
+                                    }
+                                    bindOverlayViewModel(overlay_viewModel)
                                 }
-                                setLanguage(language)
-                                setOverlayDialogCallback { visible ->
-                                    showOverlay = visible
-                                }
-                                bindOverlayViewModel(overlay_viewModel)
                             }
-                        }
-                    )
+                        )
+                    }
+
+                    // + 按钮固定宽度靠右
+                    Box(
+                        modifier = Modifier
+                            .width(80.dp)
+                            .fillMaxHeight()
+                            .background(Color(0xFF448AFF))
+                            .clickable { showDialog = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add",
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
                 }
             }
         ) { paddingValues ->
@@ -186,6 +224,41 @@ fun NewChatScreen(
             }
         }
     }
+
+    //显示语音通话选择弹窗
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("选择用户通话") },
+            text = {
+                val allUsers = listOf("en", "cn", "sh")
+                val otherUsers = allUsers.filter { it != language }
+
+                Column {
+                    otherUsers.forEach { userId ->
+                        Text(
+                            text = "用户：$userId",
+                            modifier = Modifier
+                                .clickable {
+                                    voiceCallViewModel.setTargetUser(userId) // 设置目标用户
+                                    voiceCallViewModel.setCurrentLanguage(language) // 设置目标用户
+                                    voiceCallViewModel.startCall()
+                                    showDialog = false
+                                    onNavigateToCall()
+                                }
+                                .padding(8.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
     //聚焦最新的消息，避免手动下滑去找新消息
     LaunchedEffect(chatMessages.size) {
         if (chatMessages.isNotEmpty()) {
@@ -194,19 +267,34 @@ fun NewChatScreen(
     }
     //解决首次登录时需要发送音频才能接收消息的问题（初始化就可以接收回调）
     LaunchedEffect(isReceive) {
+        //语音url追加
         overlay_viewModel.onVoiceMessageSent =
             { duration, content, isMe, fromLanguage, toLanguage, audioUrl ->
-                chatViewModel.addVoiceMessage( //用chatViewModel管理
-                    ChatMessage.Voice(
-                        duration = duration,
-                        textContent = content,
-                        isMe = isMe,
-                        fromLanguage = fromLanguage,
-                        toLanguage = toLanguage,
-                        audioUrl = audioUrl
-                    )
+                val isEnd = audioUrl.endsWith("end")
+                val cleanPath = if (isEnd) audioUrl.removeSuffix(",end") else audioUrl
+
+                chatViewModel.appendOrUpdateVoiceUrl(
+                    duration = duration,
+                    content = content,
+                    isMe = isMe,
+                    fromLanguage = fromLanguage,
+                    toLanguage = toLanguage,
+                    audioUrl = cleanPath,
+                    isEnd = isEnd
                 )
             }
+//        语音列表
+//                chatViewModel.addVoiceMessage( //用chatViewModel管理
+//                    ChatMessage.Voice(
+//                        duration = duration,
+//                        textContent = content,
+//                        isMe = isMe,
+//                        fromLanguage = fromLanguage,
+//                        toLanguage = toLanguage,
+//                        audioUrl = audioUrl
+//                    )
+//                )
+//            }
         overlay_viewModel.setReceiveState(false)
     }
 
@@ -248,11 +336,7 @@ fun NewChatVoiceItem(
     )
 
     val audioPath = message.getAudioPath()
-    var isLocalPlaying by remember { mutableStateOf(false) }
-
-    LaunchedEffect(audioPath) {
-        isLocalPlaying = AudioPlayerManager.isPlaying(audioPath)
-    }
+    val audioPaths = audioPath.split(",")
     val alpha = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
@@ -326,10 +410,10 @@ fun NewChatVoiceItem(
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onTap = {
-                                    if (!AudioPlayerManager.isPlaying(audioPath)) {
+                                    if (!AudioPlayerManager.isPlaying(audioPaths)) {
                                         onPlay(message.id)
                                         AudioPlayerManager.play(
-                                            path = audioPath,
+                                            paths = audioPaths,
                                             onStarted = { },
                                             onStopped = { onStop() }
                                         )

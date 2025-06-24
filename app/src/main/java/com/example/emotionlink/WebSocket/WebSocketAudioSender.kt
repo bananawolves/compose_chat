@@ -34,7 +34,7 @@ class WebSocketAudioSender(
         private var instanceCount = 0
     }
 
-    private var currentIndex = 0
+    var currentIndex = 0
     private lateinit var audioFile: File
     lateinit var audioWavFile: File
     private lateinit var outputStream: FileOutputStream

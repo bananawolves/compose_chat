@@ -6,20 +6,33 @@ import android.media.MediaPlayer
  */
 object AudioPlayerManager {
     private var mediaPlayer: MediaPlayer? = null
-    var currentPath: String? = null
-    private var onCompletion: (() -> Unit)? = null
+    private var currentPaths: List<String>? = null
+    private var currentIndex = 0
+    private var onAllComplete: (() -> Unit)? = null
 
     fun play(
-        path: String,
+        paths: List<String>,
         onStarted: () -> Unit,
         onStopped: () -> Unit
     ) {
-        // 如果当前就是这个音频，什么都不做
-        if (currentPath == path && mediaPlayer?.isPlaying == true) return
+        if (paths.isEmpty()) return
 
-        // 播放前先停止上一个
-        stop()
+        stop() // 播放前先清理
+        currentPaths = paths
+        currentIndex = 0
+        onAllComplete = onStopped
+        playNext(paths, onStarted,onStopped)
+    }
 
+    private fun playNext(paths: List<String>, onStarted: () -> Unit,onStopped: () -> Unit) {
+        if (currentIndex >= paths.size) {
+            stop()
+            onStopped()
+            onAllComplete?.invoke()
+            return
+        }
+
+        val path = paths[currentIndex]
         try {
             mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(
@@ -31,24 +44,23 @@ object AudioPlayerManager {
                 setDataSource(path)
                 setOnPreparedListener {
                     it.start()
-                    currentPath = path
                     onStarted()
                 }
                 setOnCompletionListener {
-                    stop()
-                    onStopped()
+                    currentIndex++
+                    playNext(paths, onStarted,onStopped)
                 }
-                setOnErrorListener { mp, _, _ ->
-                    stop()
-                    onStopped()
+                setOnErrorListener { _, _, _ ->
+                    currentIndex++
+                    playNext(paths, onStarted,onStopped)
                     true
                 }
-                prepareAsync()//异步播放，防止主线程阻塞出现anr问题
+                prepareAsync()
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            stop()
-            onStopped()
+            currentIndex++
+            playNext(paths, onStarted,onStopped)
         }
     }
 
@@ -56,11 +68,13 @@ object AudioPlayerManager {
         mediaPlayer?.stop()
         mediaPlayer?.release()
         mediaPlayer = null
-        currentPath = null
-        onCompletion = null
+        currentPaths = null
+        currentIndex = 0
+        onAllComplete = null
     }
 
-    fun isPlaying(path: String): Boolean {
-        return currentPath == path && mediaPlayer?.isPlaying == true
+    fun isPlaying(paths: List<String>): Boolean {
+        return currentPaths == paths && mediaPlayer?.isPlaying == true
     }
 }
+

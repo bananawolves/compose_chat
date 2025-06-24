@@ -1,16 +1,18 @@
 package com.example.emotionlink.WebSocket
 
-import android.content.Context
-import android.util.Log
 import com.example.emotionlink.Repository.WebSocketUploader
 import com.example.emotionlink.Utils.LogUtils
 
 object WebsocketUploaderManager {
     private var uploader: WebSocketUploader? = null
     private var messageCallback: MessageCallback? = null
+    private var callMessageCallback: CallMessageCallback? = null
 
     fun seMessageCallback(callback: MessageCallback) {
         messageCallback = callback
+    }
+    fun setCallMessageCallback(callback: CallMessageCallback) {
+        callMessageCallback = callback
     }
 
     fun initUploader(language: String,statusListener: WebSocketStatusListener) {
@@ -18,7 +20,7 @@ object WebsocketUploaderManager {
         uploader?.close()
 
         val wsUrl = buildUrlFor(language)
-        uploader = WebSocketUploader(wsUrl, messageCallback!!)
+        uploader = WebSocketUploader(wsUrl, messageCallback!!,callMessageCallback!!)
         uploader?.setStatusListener(statusListener)
         uploader?.connect()
     }
@@ -34,6 +36,6 @@ object WebsocketUploaderManager {
             else -> ""
         }
         LogUtils.d("WebsocketUploaderManager",userId)
-        return "ws://117.160.123.34:43073/waic/apitest/start_chat/?group_id=$groupId&user_id=$userId"
+        return "http://117.160.123.34:48483/waic/apitest/start_chat/?group_id=$groupId&user_id=$userId"
     }
 }

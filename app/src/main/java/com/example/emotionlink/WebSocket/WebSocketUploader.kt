@@ -1,6 +1,7 @@
 package com.example.emotionlink.Repository
 
 import com.example.emotionlink.Utils.LogUtils
+import com.example.emotionlink.WebSocket.CallMessageCallback
 import com.example.emotionlink.WebSocket.MessageCallback
 import com.example.emotionlink.WebSocket.WebSocketStatusListener
 import kotlinx.coroutines.CoroutineScope
@@ -21,11 +22,14 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 
 class WebSocketUploader(
     wsUrl: String,
-    private val messageCallback: MessageCallback
-) {
+    private val messageCallback: MessageCallback,
+    private val callMessageCallback: CallMessageCallback,
+
+    ) {
     companion object {
         private const val TAG = "WebSocketUploader"
     }
+
     private var isReconnecting = false
     private var webSocket: WebSocket? = null
     private var statusListener: WebSocketStatusListener? = null
@@ -50,7 +54,7 @@ class WebSocketUploader(
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 LogUtils.d(TAG, "Received: $text")
-                handleWebSocketMessage(text, messageCallback)
+                handleWebSocketMessage(text, messageCallback, callMessageCallback)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
@@ -65,9 +69,9 @@ class WebSocketUploader(
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                LogUtils.d(TAG, "WebSocket closing: $reason")
+                LogUtils.d(TAG, "WebSocket closing: $code")
 
-                webSocket.close(code, reason)
+//                webSocket.close(code, reason)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -114,6 +118,7 @@ class WebSocketUploader(
                 put("sample_rate", 16000)
                 put("channels", 1)
             }
+            LogUtils.d(TAG, "发送初始化")
             webSocket?.send(init.toString())
         } catch (e: Exception) {
             e.printStackTrace()
@@ -161,25 +166,72 @@ class WebSocketUploader(
         webSocket?.close(1000, "Normal closure")
     }
 
+    fun sendCallRequest(fromUserId: String) {
+        val callRequest = JSONObject().apply {
+            put("type", "Call_request")
+            put("fromUserId", fromUserId)
+        }
+        webSocket?.send(callRequest.toString())
+    }
+
+    fun sendAcceptRequest(toUserId: String) {
+        val acceptRequest = JSONObject().apply {
+            put("type", "Accept_request")
+            put("toUserId", toUserId)
+        }
+        webSocket?.send(acceptRequest.toString())
+    }
+
+    fun sendReject(toUserId: String) {
+        val rejectRequest = JSONObject().apply {
+            put("type", "reject_request")
+            put("toUserId", toUserId)
+        }
+        webSocket?.send(rejectRequest.toString())
+    }
+
+    fun sendCallEnd(toUserId: String) {
+        val acceptRequest = JSONObject().apply {
+            put("type", "end_request")
+            put("toUserId", toUserId)
+        }
+        webSocket?.send(acceptRequest.toString())
+    }
+
     @OptIn(ExperimentalEncodingApi::class)
-    fun handleWebSocketMessage(message: String, callback: MessageCallback) {
+    fun handleWebSocketMessage(
+        message: String,
+        callback: MessageCallback,
+        callback2: CallMessageCallback
+    ) {
+        if (!isJsonObject(message)) {
+            LogUtils.w(TAG, "非结构化消息，跳过: $message")
+            return
+        }
         try {
             val json = JSONObject(message)
+            val data = json.optJSONObject("data") ?: return
+            val fromLang = data.optString("from_language")
+            val toLang = data.optString("language")
+            val text = data.optString("text")
+            val wavFile = data.optString("wav_file")
+            val duration = data.optString("duration")
+            val sentence = data.optString("sentence")
+            if (wavFile != null && wavFile.isNotEmpty()) {
+                callback.onTextMessageReceived(fromLang, toLang, text, wavFile, duration, sentence)
+                callback2.onCallMessageReceived(fromLang, toLang, text, wavFile, duration)
+            }
 
-            val data = json.optJSONObject("data")
-            if (data != null) {
-                val fromLang = data.optString("from_language")
-                val toLang = data.optString("language")
-                val text = data.optString("text")
-                val wavFile = data.optString("wav_file")
-                val duration = data.optString("duration")
-
-                if (wavFile != null && wavFile.isNotEmpty()) {
-                    callback.onTextMessageReceived(fromLang, toLang, text, wavFile, duration)
-                }
+            if (json.optBoolean("callComing", false)) {
+                val fromUserId = json.optString("fromUserId")
+                callback2.onIncomingCall(fromUserId)  // 触发回调
             }
         } catch (e: Exception) {
             callback.onError(e)
         }
+    }
+
+    fun isJsonObject(str: String): Boolean {
+        return str.trim().startsWith("{") && str.trim().endsWith("}")
     }
 }

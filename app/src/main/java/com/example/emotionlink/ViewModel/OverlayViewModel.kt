@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 
 class OverlayViewModel(
     private val languageViewModel: LanguageViewModel
@@ -33,6 +35,7 @@ class OverlayViewModel(
         _isReceive.value = whether
     }
 
+    private var currentIndex: Int = 0
     private var audioSender: WebSocketAudioSender? = null
     var released by mutableStateOf(false)
     var inCancelZone by mutableStateOf(false)
@@ -45,7 +48,9 @@ class OverlayViewModel(
     private var currentLanguage: String = "11" // 设置默认语言
 
     private lateinit var localWavFile: File
-    private var wsClient: WebSocketUploader? = null
+     var wsClient: WebSocketUploader? = null
+    private val downloadedFiles = mutableListOf<File>()
+    var LocalText=""
 
     init {
         viewModelScope.launch {
@@ -59,19 +64,57 @@ class OverlayViewModel(
                             toLang: String,
                             text: String,
                             wavUrl: String,
-                            duration: String
+                            duration: String,
+                            sentence: String
                         ) {
+                            if(LocalText==text)
+                            {
+                                LogUtils.d(Tag,"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                                return
+                            }
+                            LocalText=text
+                            val fistEndTime= System.currentTimeMillis()
+                            LogUtils.d(Tag,"${startTime-fistEndTime}")
                             val isMe = fromLang == toLang
                             LogUtils.d(
                                 Tag,
                                 "来自$fromLang,目标$toLang,文字$text,是否相等${text == wavUrl},"
                                         + "音频地址: $wavUrl,持续时间$duration\""
                             )
+
                             if (!isMe) {
                                 if (text != wavUrl) {
-                                    onVoiceMessageSent?.invoke(
-                                        "$duration\"",
-                                        text, isMe, fromLang, toLang, wavUrl
+                                    val fileName = "audio_${System.currentTimeMillis()}.wav"
+                                    downloadAudioToFile(
+                                        wavUrl, fileName,
+                                        onSuccess = { localFile ->
+                                            val path = localFile.absolutePath
+                                            val isEnd = sentence == "end"
+
+                                            // 填充式url载入
+                                            onVoiceMessageSent?.invoke(
+                                                duration,
+                                                text,
+                                                false,
+                                                fromLang,
+                                                toLang,
+                                                if (isEnd) "$path,end" else path
+                                            )
+//                                            downloadedFiles.add(localFile)
+//                                            if (sentence == "end") {
+//                                                // 构建路径字符串列表
+//                                                val filePathList = downloadedFiles.map { it.absolutePath }
+//                                                val joinedPaths = filePathList.joinToString(",")
+//                                                val totalDuration = downloadedFiles.size.toString() + "段"
+//                                                onVoiceMessageSent?.invoke(
+//                                                    totalDuration, "", false, fromLang, toLang, joinedPaths
+//                                                )
+//                                                downloadedFiles.clear()
+//                                            }
+                                        },
+                                        onFailure = {
+                                            showToast("下载音频失败: ${it.message}")
+                                        }
                                     )
                                 } else {
                                     showToast("检测到网络波动,请重试")
@@ -139,12 +182,13 @@ class OverlayViewModel(
 
             audioSender?.let { sender ->
                 localWavFile = sender.audioWavFile
+                currentIndex = sender.currentIndex
             }
             //本地录言优先显示
             if (!inCancelZone) {
                 onVoiceMessageSent?.invoke(
                     firstDuration, "",
-                    true, currentLanguage, currentLanguage, localWavFile.absolutePath
+                    true, currentLanguage, currentLanguage,  "${localWavFile.absolutePath},end"
                 )
             }
 
@@ -155,7 +199,6 @@ class OverlayViewModel(
                     LogUtils.d(Tag, "!!!!!!!发送结束消息")
                     wsClient?.sendEnd(firstDuration)
                 }
-                setReceiveState(true)
                 // 只清理录音相关资源，保持 WebSocket 连接
                 audioSender?.clearListener()
                 audioSender = null
@@ -170,4 +213,40 @@ class OverlayViewModel(
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
+
+    private fun downloadAudioToFile(
+        url: String,
+        fileName: String,
+        onSuccess: (File) -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        val client = okhttp3.OkHttpClient()
+        val request = okhttp3.Request.Builder().url(url).build()
+
+        client.newCall(request).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: IOException) {
+                onFailure(e)
+            }
+
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                if (!response.isSuccessful) {
+                    onFailure(IOException("Unexpected code $response"))
+                    return
+                }
+
+                val audioDir = File(context.cacheDir, "recorded_audio")
+                if (!audioDir.exists()) audioDir.mkdirs()
+                val outputFile = File(audioDir, fileName)
+
+                response.body?.byteStream().use { input ->
+                    FileOutputStream(outputFile).use { output ->
+                        input?.copyTo(output)
+                    }
+                }
+
+                onSuccess(outputFile)
+            }
+        })
+    }
+
 }

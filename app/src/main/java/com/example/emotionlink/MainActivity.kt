@@ -9,19 +9,22 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModelProvider
+import com.example.emotionlink.View.CallScreen
 //import com.example.emotionlink.ViewModel.ChatScreen
 import com.example.emotionlink.ViewModel.LanguageViewModel
-import com.example.emotionlink.ViewModel.NewChatScreen
-import com.example.emotionlink.ViewModel.SettingsScreen
+import com.example.emotionlink.View.NewChatScreen
+import com.example.emotionlink.View.SettingsScreen
+import com.example.emotionlink.ViewModel.VoiceCallViewModel
 
 
 class MainActivity : ComponentActivity() {
     private lateinit var languageViewModel: LanguageViewModel
+    private lateinit var voiceCallViewModel: VoiceCallViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        languageViewModel = ViewModelProvider(this)[LanguageViewModel::class.java]
-
+        languageViewModel = ViewModelProvider(this,)[LanguageViewModel::class.java]
+        voiceCallViewModel = ViewModelProvider(this)[VoiceCallViewModel::class.java]
         enableEdgeToEdge()
 
         setContent {
@@ -30,9 +33,13 @@ class MainActivity : ComponentActivity() {
             when (currentScreen) {
                 "chat" -> NewChatScreen(
                     langue_viewModel = languageViewModel,
+                    voiceCallViewModel = voiceCallViewModel,
                     onLanguageSelected = { lang -> languageViewModel.setLanguage(lang) },
                     onNavigateToSettings = {
                         currentScreen = "settings"
+                    },
+                    onNavigateToCall = {
+                        currentScreen = "CallScreen"
                     }
                 )
 
@@ -41,6 +48,13 @@ class MainActivity : ComponentActivity() {
                         languageViewModel.setLanguage(lang)
                         currentScreen = "chat"
                     },
+                    onBack = {
+                        currentScreen = "chat"
+                    }
+                )
+
+                "CallScreen" -> CallScreen(
+                    viewModel = voiceCallViewModel,
                     onBack = {
                         currentScreen = "chat"
                     }

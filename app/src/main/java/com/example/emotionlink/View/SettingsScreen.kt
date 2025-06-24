@@ -1,4 +1,4 @@
-package com.example.emotionlink.ViewModel
+package com.example.emotionlink.View
 
 import android.net.Uri
 import android.widget.Toast
@@ -9,7 +9,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.emotionlink.data.UserProfileManager

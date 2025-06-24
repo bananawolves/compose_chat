@@ -1,14 +1,13 @@
 package com.example.emotionlink.WebSocket
 
-interface MessageCallback {
-
-    fun onTextMessageReceived(
+interface CallMessageCallback {
+    fun onCallMessageReceived(
         fromLang: String,
         toLang: String,
         text: String,
         wavUrl: String,
-        duration: String,
-        sentence: String
+        duration: String
     )
+    fun onIncomingCall(fromUserId: String)
     fun onError(e: Exception)
 }
