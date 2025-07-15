@@ -37,11 +37,11 @@ class ChatViewModel(
     }
     private val stateHandle = savedStateHandle
 
-    fun addVoiceMessage(message: ChatMessage.Voice) {
-        val updated = _chatVoiceItems.value + message
-        _chatVoiceItems.value = updated
-        saveToStateHandle(updated)
-    }
+//    fun addVoiceMessage(message: ChatMessage.Voice) {
+//        val updated = _chatVoiceItems.value + message
+//        _chatVoiceItems.value = updated
+//        saveToStateHandle(updated)
+//    }
 
 
     private fun saveToStateHandle(list: List<ChatMessage.Voice>) {
