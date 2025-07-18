@@ -28,14 +28,7 @@ object WebsocketUploaderManager {
     fun getUploader(): WebSocketUploader? = uploader
 
     private fun buildUrlFor(language: String): String {
-        val groupId = "JQBHLtzmz8uxUpV9sexxbJ"
-        val userId = when (language) {
-            "cn" -> "h7tX4B5KHETk2dkjVjVnwx"
-            "en" -> "VT6iqWi98w9cXPfuxkHqzM"
-            "sh" -> "Djehfea5ErSfC6ZrbHSfxH"
-            else -> ""
-        }
-        LogUtils.d("WebsocketUploaderManager",userId)
-        return "http://117.160.123.34:48483/waic/apitest/start_chat/?group_id=$groupId&user_id=$userId"
+        //你的url
+        return "你的url"
     }
 }
